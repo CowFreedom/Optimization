@@ -1,0 +1,9 @@
+Siehe: https://devblogs.microsoft.com/cppblog/c-modules-conformance-improvements-with-msvc-in-visual-studio-2019-16-5/#module-partitions
+
+1:
+
+cl /EHsc /experimental:module /std:c++latest /c performance/test_perf_transform_cpu.ixx cl /EHsc /experimental:module /std:c++latest /c performance/performance.ixx cl /EHsc /experimental:module /std:c++latest /c tests.ixx 
+
+2:
+cl /EHsc /experimental:module /std:c++latest run_diagnostics.cpp tests.obj performance.obj test_perf_transform_cpu.obj  
+ 
