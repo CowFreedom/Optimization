@@ -12,21 +12,42 @@ namespace opt{
 
 	
 		export class TestInterface{
+
+			private:
+
+			bool (*test_function)(std::ostream& os, TestInterface& v);
+
 			public:
 			const std::string name;
 			
-			bool run_test(){
-				
-				
-				return test_function(std::cout,*this);
+			virtual bool run_test()=0;
 			
-			}
 			
-			bool (*test_function)(std::ostream& os, TestInterface& v);
 
 			TestInterface(std::string _name, bool (*f)(std::ostream&, TestInterface& v)): name(_name), test_function(f){
 			}
 			
+		};
+
+		export class PerformanceTest:public TestInterface{
+			private:
+			bool (*test_function)(std::ostream& os, PerformanceTest& v);
+
+			public:
+			std::chrono::seconds time_taken;
+
+			//PerformanceTest(std::string _name, bool (*f)(std::ostream&, TestInterface& v)): TestInterface(_name,f){	
+			//}
+
+
+			PerformanceTest(std::string _name, bool (*f)(std::ostream&, PerformanceTest& v)): TestInterface(_name,nullptr), test_function(f){	
+			}	
+
+			bool run_test() override{
+
+				return test_function(std::cout,*this);
+
+			}
 		};
 		
 

@@ -1,7 +1,9 @@
 module;
 #include<string>
 #include <ostream>
+#include <fstream>
 #include <vector>
+#include <filesystem>
 export module tests.performance;
 export import :transform.cpu;
 
@@ -10,29 +12,31 @@ import tests;
 //import string;
 namespace opt{
 	namespace test{
-	
-		export class PerformanceTest:public TestInterface{
-			private:
-			
-			public:
-
-			PerformanceTest(std::string _name, bool (*_f)(std::ostream&, TestInterface& v)): TestInterface(_name,_f){
-			
+		namespace perf{
+			export bool save_metrics(std::vector<opt::test::PerformanceTest>& values, std::string timestring){
+				std::filesystem::path path("performance/logs/");
+				std::string output="Results of the performance test from ";
+				output+=timestring;
+				output+=":\n \n";
+				output+="Name\t\t\tTime taken (seconds)\n";
+				for (auto& v: values){
+					output+=v.name;
+					output+="\t\t\t";
+					output+=std::to_string(v.time_taken.count());
+					output+="\n";
+				}
+				std::ofstream file_output;	
+				std::filesystem::create_directories("performance/logs");
 				
-			}	
-		};
-		
-		
-		export std::vector<PerformanceTest> get_performance_tests(){
-			std::vector<PerformanceTest> v;
-			v.push_back(PerformanceTest("dgmm_nn_test_square_5000_d",opt::test::perf::dgmm_nn_test_square_5000_d));
-			return v;
-		}
-		
-	}
-	
-	
 
+				timestring +="_performance_log.txt";
+				file_output.open(path/timestring);
+				file_output<<output;
+				file_output.close();
+				return true;
+			}
+		}
+	}
 }
 
 
