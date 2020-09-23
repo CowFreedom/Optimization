@@ -4,5 +4,6 @@
 *.ifc
 *.pcm
 *.obj
+*.o
 *.txt
 **/logs

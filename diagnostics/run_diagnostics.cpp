@@ -28,7 +28,7 @@ bool run_performance_tests(std::ostream& os, bool save_metrics){
 			result=temp;
 		}
 		if ((i%3)==0){
-			os<<i+1<<"from "<<v.size()<<" performance tests finished \n";
+			os<<i+1<<" out of "<<v.size()<<" performance tests finished \n";
 		}
 	}
 	if (save_metrics==true){
