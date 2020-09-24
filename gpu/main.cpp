@@ -1,5 +1,5 @@
 import optimization.transformation;
-import gpubindings;
+import optimization.gpubindings;
 #include <iostream>
 #include<stdio.h>
 #include <stdlib.h>

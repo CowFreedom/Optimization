@@ -1,6 +1,6 @@
 module;
 
-export module gpubindings;
+export module optimization.gpubindings;
 
 //forward declaration
 extern "C"{
