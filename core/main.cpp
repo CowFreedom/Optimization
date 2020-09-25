@@ -18,35 +18,40 @@ typename T::value_type sos(T& storage){
 
 
 
-template<class T>
-void residual(const T& params, typename T::iterator storage){
-	*storage=params[0]-1;
-	*(storage+1)=params[1]+0.3;
+template<class C, class T>
+void residual(C params, T storage){
+	typename T::value_type x0=*params;
+	typename T::value_type x1=*(params+1);
+	*storage=x0-1;
+	*(storage+1)=x1+0.3;
 }
 
 /*Transposed jacobian*/
-template<class T>
-void j_t_circle(const T& x, typename T::iterator storage){
-	
-	*storage=2*x[0];
+template<class C, class T>
+void j_t_circle(C x, T storage){
+	typename T::value_type x0=*x;
+	typename T::value_type x1=*(x+1);
+	*storage=1;
 	*(storage+1)=0;
 	*(storage+2)=0;
-	*(storage+3)=2*x[1];	
+	*(storage+3)=1;	
 }
 
-template<class T>
-void j_t_j_inv_circle(const T& x, typename T::iterator storage){
-	*storage=1.0/(4.0*x[0]*x[0]);
+template<class C, class T>
+void j_t_j_inv_circle(C x, T storage){
+	typename T::value_type x0=*x;
+	typename T::value_type x1=*(x+1);
+	*storage=1;
 	*(storage+1)=0;
 	*(storage+2)=0;
-	*(storage+3)=1.0/(4.0*x[1]*x[1]);	
+	*(storage+3)=1;	
 }
 
 
 
 
 int main(){
-	std::vector<double> v={1.3,-0.3};
+	std::vector<double> v={2.3,-0.3};
 	std::array<double,3> v2={1,-0.3,4};
 	//std::cout<<sos(v2);
 	
