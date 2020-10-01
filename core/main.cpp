@@ -4,6 +4,7 @@ import optimization.solvers;
 #include <iostream>
 #include <vector>
 #include<array>
+#include <deque>
 
 template<class T>
 typename T::value_type sos(T& storage){
@@ -51,14 +52,13 @@ void j_t_j_inv_circle(C x, T storage){
 
 
 int main(){
-	std::vector<double> v={2.3,-0.3};
+	std::deque<double> v={2.3,-0.3};
 	std::array<double,3> v2={1,-0.3,4};
 	//std::cout<<sos(v2);
 	
-	
 	int dim_residual=2;
 	opt::solvers::gns::ResidualPure<std::vector<double>> res(residual,dim_residual);
-	opt::solvers::gns::ResidualPureJI<std::vector<double>> res_ji(residual,j_t_circle,j_t_j_inv_circle,dim_residual);
+	opt::solvers::gns::ResidualPureJI<std::deque<double>> res_ji(residual,j_t_circle,j_t_j_inv_circle,dim_residual);
 //	opt::solvers::A a(res);
 	opt::solvers::GNSCPU gns(res_ji,std::cout);
 	//opt::solvers::gns::Residual<opt::solvers::gns::ResidualSpec::Pure,std::vector<double>,opt::solvers::gns::HasJacInv::No> res(residual,dim_residual);
@@ -68,6 +68,14 @@ int main(){
 	auto result=gns.run(v);
 	if (result){
 		std::cout<<"Gauss-Newton procedure finished successfully\n";
+		std::cout<<"The estimated parameters are:\n{";
+		
+		for (const auto& x: *result){
+			std::cout<<x<<",";
+			
+		}
+		std::cout<<"}\n";
+		
 	}
 	else{
 		std::cout<<"Gauss-Newton procedure terminated with error.\n";

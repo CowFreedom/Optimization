@@ -1,11 +1,11 @@
 import tests.performance;
+import tests.correctness;
 import tests;
 #include <iostream>
 #include<vector>
 #include<sstream>
 #include <iomanip>
 #include <ostream>
-//#include <chrono>
 
 
 bool run_performance_tests(std::ostream& os, bool save_metrics){
@@ -40,11 +40,40 @@ bool run_performance_tests(std::ostream& os, bool save_metrics){
 }
 
 
+
+bool run_correctness_tests(std::ostream& os, bool save_metrics){
+	auto t = std::time(nullptr);
+	auto tm = *std::localtime(&t);
+	std::ostringstream oss;
+	oss << std::put_time(&tm, "%d-%m-%Y_%Hh-%Mm-%Ss");
+	
+
+	std::vector<opt::test::CorrectnessTest> v;
+	v.push_back(opt::test::CorrectnessTest("gauss_newton_example1",opt::test::corr::gauss_newton_example1));
+	bool result=true;
+	
+	for (int i=0; i<v.size(); i++){
+		bool temp=v[i].run_test();
+		if (temp!= true){
+			result=temp;
+		}
+		if ((i%3)==0){
+			os<<i+1<<" out of "<<v.size()<<" correctness tests finished \n";
+		}
+	}
+	if (save_metrics==true){
+		//opt::test::corr::save_metrics(v,oss.str());
+	}
+	
+	return result;
+
+}
+
 bool run_tests(std::ostream& os,bool save_stats){
 
-	bool test1=run_performance_tests(os, save_stats); //run performance tests
-	
-	return test1;
+	//bool test1=run_performance_tests(os, save_stats); //run performance tests
+	bool test2=run_correctness_tests(os,save_stats); //run correctness tests
+	return test2;
 }
 
 int main(){

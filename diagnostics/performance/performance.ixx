@@ -5,7 +5,7 @@ module;
 #include <vector>
 #include <filesystem>
 export module tests.performance;
-export import :transform.cpu;
+export import :transform;
 
 import tests;
 

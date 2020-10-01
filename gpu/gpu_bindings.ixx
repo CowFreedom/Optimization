@@ -1,5 +1,5 @@
 module;
-
+#include <vector>
 export module optimization.gpubindings;
 
 //forward declaration
@@ -9,10 +9,30 @@ extern "C"{
 	
 	export void dgemm_nn_gpu_double(size_t m, size_t n, size_t k, double alpha, double* A, size_t stride_row_a, size_t stride_col_a,
 	double* B, size_t stride_row_b, size_t stride_col_b, double beta, double* C, size_t stride_row_c, size_t stride_col_c);
-
-
+	
+	struct ResidualGPU{
+		void* res; //pointer to Residual class, see PIMPL pattern http://www.olivierlanglois.net/idioms_for_using_cpp_in_c_programs.html
+	};
+	
+	
+	/*
+	ResidualGPU ResidualGPU_create(ResidualGPU* res){
+		
+	
+	}
+	
+	void ResidualGPU_destroy(ResidualGPU* r){
+	
+		delete static_cast<opt::solvers::gns::ResidualSpec::Pure,std::vector<float>,opt::solvers::gns::HasJacInv::Yes>*>(r->res);
+		delete r;
+	
+	}
+	*/
+	
+	
 }
 namespace opt{
+
 
 	namespace math{
 

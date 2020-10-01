@@ -3,11 +3,11 @@ module;
 #include <random>
 #include <ostream>
 #include <chrono>
-export module tests.performance:transform.cpu;
+export module tests.performance:transform;
 
 import tests;
 
-import optimization.transformation.cpu;
+import optimization.transformation;
 
 namespace opt{
 	namespace test{
@@ -30,7 +30,7 @@ namespace opt{
 				// Get starting timepoint 
 			  	auto start = std::chrono::high_resolution_clock::now(); 
 				//Function to measure
-				opt::math::dgemm_nn(n,n,n,1.0,A.begin(),1,n,B.begin(),1,n,double(0.0),C.begin(),1,n);
+				opt::math::cpu::dgemm_nn(n,n,n,1.0,A.begin(),1,n,B.begin(),1,n,double(0.0),C.begin(),1,n);
 				// Get ending timepoint 
 				auto stop = std::chrono::high_resolution_clock::now(); 
 			  

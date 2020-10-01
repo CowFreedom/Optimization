@@ -121,6 +121,41 @@ namespace opt{
 			
 			export template<ValidContainer T>
 			using ResidualDataJI=Residual<ResidualSpec::Data,T,HasJacInv::Yes>;
+			
+			
+			
+				/*
+			template<class T>
+			std::string print_info<EFloat64>(T vars, T J_T_J_inv, int iteration, typename T::value_type f0x){
+				std::ostringstream res;
+				res.precision(15);
+				size_t m=vars;
+				const std::vector<EVar<EFloat64>>& params=vars.get_params();
+				const std::vector<std::string>& names=vars.get_names();
+				
+				std::vector<double> std_devs_inv(m,0.0);
+				
+				//Calculate variances for each parameter
+				for (int i=0;i<m;i++){
+					std_devs_inv[i]=1.0/sqrt(J_T_J_inv_scaled[i+i*m].get_v());
+				}
+				
+				res<<std::setw(30)<<std::left<<"Newton iteration: "<<iteration<<"\n";
+				res<<std::setw(30)<<std::left<<"Squared Error: "<<squared_error.get_v()<<"\n";
+				res<<std::setw(30)<<std::left<<"Parameter"<<"|"<<std::setw(25)<<"Estimate"<<"|"<<std::setw(30)<<"Approx. Standard Error"<<"|"<<std::setw(20)<<"Approx. Correlation Matrix\n";
+				for (int i=0;i<m;i++){
+					res<<std::setw(30)<<std::left<<names[i]<<"|"<<std::setw(25)<<std::right<<params[i].get_value_as_double()<<"|"<<std::setw(30)<<sqrt(J_T_J_inv_scaled[i+i*m].get_v())<<"|";
+					for (int j=0;j<=i;j++){
+						res<<"\t"<<std::setw(13)<<std_devs_inv[i]*std_devs_inv[j]*J_T_J_inv_scaled[j+i*m].get_v();
+					}
+					res<<"\n";
+				}
+				
+				return res.str();
+				
+			}			
+
+*/			
 		}
 	
 		export template<ValidContainer T,gns::ResidualSpec K,gns::HasJacInv F>
@@ -173,10 +208,10 @@ namespace opt{
 			
 			private:
 			gns::Residual<K,T,gns::HasJacInv::Yes>& r;
-			int lambda=0.5; //determines, how much the step size is reduced at each iteration of the wolfe conditions
+			gfloat lambda=0.5; //determines, how much the step size is reduced at each iteration of the wolfe conditions
 			gfloat tol=0.001;
 			int max_step_iter=2; //maximum number of iterations during the stepsize finding process
-			
+			gfloat c1=0.5;
 			gfloat f0(typename T::const_iterator params,typename T::iterator residuals){
 			
 				T result(1);
@@ -188,11 +223,11 @@ namespace opt{
 			
 			void dgemm_and_residual(size_t d ,gfloat beta,typename T::iterator A, typename T::iterator x_source, typename T::iterator x_dest, typename T::iterator res, gfloat& f0_res){
 					T residual(r.dim);
-				
+				std::copy(x_source,x_source+d,x_dest);
 					
-							
-					std::copy(x_source,x_source+d,x_dest);
-					/*
+							/*
+					
+					
 						os<<"x_dest davor\n";
 						for (int i=0;i<d;i++){
 							os<<*(x_dest+i)<<"\t";
@@ -216,10 +251,16 @@ namespace opt{
 					}
 					
 				
-				*/
-					opt::math::cpu::dgemm_nn(d,1,r.dim,beta,A,1,r.dim,res,1,1,gfloat(1.0),x_dest,1,1);	
-					f0_res=f0(x_dest,residual.begin());					
+				
+					*/
+					
+					
+					opt::math::cpu::dgemm_nn(d,1,r.dim,-beta,A,1,r.dim,res,1,1,gfloat(1.0),x_dest,1,1);	
+					f0_res=f0(x_dest,residual.begin());		
+					
+				
 				/*
+				
 					
 					os<<"r_i+beta*(J_T_J)^-1*J_T*r_i\n";
 						for (int i=0;i<d;i++){
@@ -232,6 +273,37 @@ namespace opt{
 			
 			std::ostream& os;
 			
+			//backtracking line search
+			bool bls(gfloat fnew, gfloat fmin, gfloat beta, typename T::iterator grad, typename T::iterator xb,typename T::iterator xe,typename T::iterator xpb, int d){
+		//	std::cout<<"BLS: beta: "<<beta<<"\n";
+				T direction(d);
+				std::transform(xb,xe,xpb, direction.begin(),std::minus<double>()); //not numerically stable but faster than doing the matrix calculations again
+			/*			
+				std::cout<<"xb:\n";
+				for (int i=0;i<d;i++){
+				std::cout<<*(xb+i)<<"\t";
+				}
+				
+				std::cout<<"\nxp:\n";
+				for (int i=0;i<d;i++){
+				std::cout<<*(xpb+i)<<"\t";
+				}
+				
+				std::cout<<"\n grad:\n";
+				for (int i=0;i<d;i++){
+				std::cout<<*(grad+i)<<"\t";
+				}*/			
+				
+				T fk(1,fmin);
+				opt::math::cpu::dgemm_nn(1,1,d,c1,direction.begin(),1,d,grad,1,1,gfloat(1.0),fk.begin(),1,1);	
+				//std::cout<<"f new: "<<fnew <<" f(xk)"<<*(fk.begin())<<"\n";
+				if (fnew<=*(fk.begin())){
+					return true;
+				}
+				else{
+					return false;
+				}
+			}
 			
 			public:
 			
@@ -246,14 +318,6 @@ namespace opt{
 			*/
 			std::optional<T> run(T x0){
 				
-				//, void (&jacobian)(const T&, typename T::iterator)
-				//	size_t j_n=target_data.size(); //height of jacobi matrix
-				//size_t j_m=parameters[0].len(); //length of jacobi matrix
-					//x_n=evaluator.eval(initial_params,target_times)[0];
-				//	size_t iter=0;
-				//	bool run_finished=false;
-				//	T e_g2=T(0.0); ;//adagrad like adaptive stepsize factor
-					
 				bool run_finished=false;
 				
 				//Test is parameters already minimize f0 according to tol
@@ -266,12 +330,13 @@ namespace opt{
 				else{
 					int d=x0.size();
 					T J_t(r.dim*d);
+					T grad(d);
 					T J_t_J_inv(d*d);
 					int n_threads=1;
 					T C(r.dim*d);
 					T xi(x0.begin(),x0.end());
 					T xs(d*n_threads);
-					
+					gfloat alpha=0.7;		
 					int iter=0;
 					
 					std::vector<std::thread> ts(n_threads);
@@ -280,41 +345,41 @@ namespace opt{
 					while (run_finished==false){
 						r.j_t(xi.begin(),J_t.begin());
 						r.j_t_j_inv(xi.begin(),J_t_J_inv.begin());
-						
+		
 						opt::math::cpu::dgemm_nn(d,r.dim,d,gfloat(1.0),J_t_J_inv.begin(),1,d,J_t.begin(),1,r.dim,gfloat(0.0),C.begin(),1,r.dim);
 						
-						gfloat alpha=-1.0;		
 						
-						for (auto& x:C){
-						os<<x<<"\t";
+						/*Calculate gradient from indices of jacobi matrix. Used for backtracking stepsize finding later*/
+						for (int i=0;i<d;i++){
+							gfloat sum=0;
+							for (int j=0;j<r.dim;j++){
+								
+								sum+=*(J_t.begin()+j+i*d)*gfloat(2.0)* *(residuals.begin()+j);
+							}
+							*(grad.begin()+i)=sum;
 						}
-						std::cout<<"\n\n";
+			//			std::cout<<"current x:\n";
 						
-						
-						
-						
-						
-						//J_t_J
-						std::cout<<"current x:\n";
-						for (auto& x:xi){
-						os<<x<<"\t";
-						}
-						std::cout<<"\n";
 						gfloat beta=alpha;
 						
 						std::vector<gfloat> f0_vals(n_threads);
 						std::vector<gfloat> betas(n_threads);
 						int step_iter=0;
 						bool step_size_found=false;
+						
+								
 						while(!step_size_found && step_iter<=max_step_iter){
 						step_iter++;
 							
 							for (int i=0;i<n_threads;i++){
-							
+						//	std::cout<<"beta:"<<beta<<"lambda:"<<lambda<<"\t \t";
 							//	t[i]=std::thread(opt::math::cpu::dgemm_nn(d,1,r.dim,beta,C.begin(),1,r.dim,residuals.begin(),1,r.dim,gfloat(1.0),(xi.begin()),1,d);
-								ts[i]=std::thread(&GNSCPU::dgemm_and_residual,this,d,beta,C.begin(),xi.begin(),xs.begin()+n_threads*d,residuals.begin(),std::ref(f0_vals[i]));
+							
+			
+								ts[i]=std::thread(&GNSCPU::dgemm_and_residual,this,d,beta,C.begin(),xi.begin(),xs.begin()+i*d,residuals.begin(),std::ref(f0_vals[i]));
 								betas[i]=beta;
 								beta*=lambda;
+								
 							}
 							
 							/*
@@ -333,16 +398,7 @@ namespace opt{
 							for (auto& t: ts){
 								t.join();
 							}
-							
-								for (auto& k: f0_vals){
-								
-								std::cout<<"err"<<k<<"\t";
-							
-							}
-							
-							
-							std::cout<<"\n\n";
-							
+					
 							//Find step size that minimizes f0 the most						
 							curr_min=f0_vals[0];
 							int min_index=0;
@@ -352,12 +408,14 @@ namespace opt{
 									min_index=i;
 								}
 							}		
-							std::cout<<"curr_min:"<<curr_min<<" fmin:"<<fmin<<"\n";
-							if (curr_min<fmin){
+						//	std::cout<<"curr_min:"<<curr_min<<" fmin:"<<fmin<<"\n";
+						//	std::cout<<"min index:"<<min_index<<"\n";
+				
+							if (bls(curr_min,fmin,betas[min_index],grad.begin(),xs.begin()+min_index,xs.begin()+min_index+d,xi.begin(),d)){
 								fmin=curr_min;
-								
-								std::copy(xs.begin()+min_index,xs.end()+min_index,xi.begin());
-								r.r(xs.begin(),residuals.begin());
+								std::copy(xs.begin()+min_index,xs.begin()+min_index+d,xi.begin());
+								r.r(xi.begin(),residuals.begin());
+								std::cout<<"Current error: "<<fmin<<"\n";
 								step_size_found=true;
 							}
 										
@@ -367,16 +425,14 @@ namespace opt{
 							return {};
 						}
 						
-						std::cout<<"fmin now:"<<fmin<<"\n";
-						std::cout<<"tol now:"<<tol<<"\n";
 						if (fmin<=tol){
 							run_finished=true;
 
-							return {xs};
+							return {xi};
 						}
 				
 						iter++;
-						if (iter==3){
+						if (iter==4){
 							return {};
 						}
 

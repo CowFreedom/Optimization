@@ -50,6 +50,22 @@ namespace opt{
 			}
 		};
 		
+		export class CorrectnessTest:public TestInterface{
+			private:
+			bool (*test_function)(std::ostream& os, CorrectnessTest& v);
+
+			public:
+
+			CorrectnessTest(std::string _name, bool (*f)(std::ostream&, CorrectnessTest& v)): TestInterface(_name,nullptr), test_function(f){	
+			}	
+
+			bool run_test() override{
+
+				return test_function(std::cout,*this);
+
+			}
+		};
+		
 
 		export template <class T, class F>
 		void fill_container_randomly(std::random_device& dev, T v,int n){

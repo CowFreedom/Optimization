@@ -1,8 +1,8 @@
 #include<stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "cuda_runtime.h"
-#include "device_launch_parameters.h"
+//#include "cuda_runtime.h"
+//#include "device_launch_parameters.h"
 
 __global__ 
 void k_matrix_mul_block(float* d_A, float* d_B, float* d_C, size_t width){
