@@ -11,6 +11,7 @@ ECHO Building executable
 ::Building core program
 cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\..\core\transformation.ixx 
 cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\..\solvers\gaussnewton.ixx
+cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\..\gpu\gpu_gaussnewton.ixx
 cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\..\solvers\solvers.ixx
 
 ::Building test modules

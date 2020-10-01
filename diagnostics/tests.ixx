@@ -58,7 +58,7 @@ namespace opt{
 
 			CorrectnessTest(std::string _name, bool (*f)(std::ostream&, CorrectnessTest& v)): TestInterface(_name,nullptr), test_function(f){	
 			}	
-
+			bool test_successful=false;
 			bool run_test() override{
 
 				return test_function(std::cout,*this);

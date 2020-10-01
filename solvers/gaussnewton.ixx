@@ -32,97 +32,6 @@ namespace opt{
 				No
 			};
 			
-			export template<ResidualSpec K,ValidContainer T, HasJacInv>
-			class Residual{
-		
-			};
-			
-			export template<ValidContainer T>
-			class Residual<ResidualSpec::Pure,T,HasJacInv::No>{
-			
-			
-				
-				public:
-				Residual(void (&_r)(typename T::const_iterator params, typename T::iterator storage), int _dim):r(_r),dim(_dim){
-				
-				}
-				
-				void (&r)(typename T::const_iterator params, typename T::iterator storage); //the container contains a vector of residuals.
-				
-				const int dim;
-			
-			};
-			
-			template<ValidContainer T>
-			class Residual<ResidualSpec::Data,T,HasJacInv::No>{
-			
-				T v;
-				
-				public:
-				Residual(void (&_r)(typename T::const_iterator params, typename T::iterator storage),T _v, int _dim):r(_r),v(_v), dim(_dim){
-				
-				}
-			
-				void (&r)(typename T::const_iterator params,typename T::iterator storage); //the container contains a vector of residuals.
-				
-				
-				const int dim;
-			
-			};
-			
-			
-			template<ValidContainer T>
-			class Residual<ResidualSpec::Pure,T,HasJacInv::Yes>{
-			
-				T v;
-				public:
-				Residual(void (&_r)(typename T::const_iterator params, typename T::iterator storage),void (&_j_t)(typename T::const_iterator, typename T::iterator),void (&_j_t_j_inv)(typename T::const_iterator, typename T::iterator),int _dim):r(_r),j_t(_j_t),j_t_j_inv(_j_t_j_inv),dim(_dim){
-				
-				}
-			
-				void (&r)(typename T::const_iterator params,typename T::iterator storage); //the container contains a vector of residuals.
-				
-				//jacobi matrix
-				void (&j_t)(typename T::const_iterator, typename T::iterator);
-				
-				void (&j_t_j_inv)(typename T::const_iterator, typename T::iterator);
-				
-				const int dim;
-			
-			};
-			template<ValidContainer T>
-			class Residual<ResidualSpec::Data,T,HasJacInv::Yes>{
-			
-				T v;
-				public:
-				Residual(void (&_r)(typename T::const_iterator params, typename T::iterator storage),void (&_j_t)(typename T::const_iterator, typename T::iterator),void (&_j_t_j_inv)(typename T::const_iterator, typename T::iterator),T _v, int _dim):r(_r),v(_v), j_t(_j_t),j_t_j_inv(_j_t_j_inv),dim(_dim){
-				
-				}
-			
-				void (&r)(typename T::const_iterator params,typename T::iterator storage); //the container contains a vector of residuals.
-				
-				//jacobi matrix
-				void (&j_t)(typename T::const_iterator, typename T::iterator);
-				
-				void (&j_t_j_inv)(typename T::const_iterator, typename T::iterator);
-				
-				const int dim;
-			
-			};
-			
-			export template<ValidContainer T>
-			using ResidualPure=Residual<ResidualSpec::Pure,T,HasJacInv::No>;
-
-			export template<ValidContainer T>
-			using ResidualData=Residual<ResidualSpec::Data,T,HasJacInv::No>;		
-
-			export template<ValidContainer T>
-			using ResidualPureJI=Residual<ResidualSpec::Pure,T,HasJacInv::Yes>;
-			
-			export template<ValidContainer T>
-			using ResidualDataJI=Residual<ResidualSpec::Data,T,HasJacInv::Yes>;
-			
-			
 			
 				/*
 			template<class T>
@@ -158,71 +67,40 @@ namespace opt{
 */			
 		}
 	
-		export template<ValidContainer T,gns::ResidualSpec K,gns::HasJacInv F>
+		export template<ValidContainer T,class U,gns::HasJacInv F>
 		class GNSCPU{
-			GNSCPU(gns::Residual<K,T,F>& _r,std::ostream& _os){
+				GNSCPU(U _r,U _j_t, U _j_t_j_inv,int _xdim, std::ostream& _os){
 			
 			}
 		};
-		
-		export template<ValidContainer T,gns::ResidualSpec K, gns::HasJacInv F>
-		class A
-		{
-		public:
-			A(gns::Residual<K,T,F>& r){
-				std::cout<<"A standard \n";
-			}
-		};
-		
-		
-		export template<ValidContainer T,gns::ResidualSpec K>
-		class A<T,K,gns::HasJacInv::Yes>
-		{
-		public:
-			A(gns::Residual<K,T, gns::HasJacInv::Yes>& r){
-				std::cout<<"A yes \n";
-			}
-		
-		
-		};
-		
-		export template<ValidContainer T,gns::ResidualSpec K>
-		class A<T,K,gns::HasJacInv::No>
-		{
-		private:
-			gns::Residual<K,T,gns::HasJacInv::No>& r;
-	
-		public:
 
-			A(gns::Residual<K,T, gns::HasJacInv::No>& _r):r(_r){
-				std::cout<<"A no \n";
-			}
-		
-		
-		};
-
-		export template<ValidContainer T,gns::ResidualSpec K>
-		class GNSCPU<T,K,gns::HasJacInv::Yes> {
+		export template<ValidContainer T,class U>
+		class GNSCPU<T,U,gns::HasJacInv::Yes> {
 		
 			using gfloat=typename T::value_type;
 			
 			private:
-			gns::Residual<K,T,gns::HasJacInv::Yes>& r;
+			U r;
+			U j_t;
+			U j_t_j_inv;
+			int xdim;
 			gfloat lambda=0.5; //determines, how much the step size is reduced at each iteration of the wolfe conditions
 			gfloat tol=0.001;
-			int max_step_iter=2; //maximum number of iterations during the stepsize finding process
+			int n_threads=1;
+			int max_step_iter=60/n_threads; //maximum number of iterations during the stepsize finding process
+			int max_iter=300; //maximum number of iterations
 			gfloat c1=0.5;
 			gfloat f0(typename T::const_iterator params,typename T::iterator residuals){
 			
 				T result(1);
-				r.r(params,residuals);	
-				opt::math::cpu::dgemm_nn(1,1,r.dim,gfloat(1.0),residuals,1,r.dim,residuals,1,1,gfloat(0.0),result.begin(),1,1);
+				r(params,residuals);	
+				opt::math::cpu::dgemm_nn(1,1,xdim,gfloat(1.0),residuals,1,xdim,residuals,1,1,gfloat(0.0),result.begin(),1,1);
 				
 				return *(result.begin());
 			}
 			
 			void dgemm_and_residual(size_t d ,gfloat beta,typename T::iterator A, typename T::iterator x_source, typename T::iterator x_dest, typename T::iterator res, gfloat& f0_res){
-					T residual(r.dim);
+					T residual(xdim);
 				std::copy(x_source,x_source+d,x_dest);
 					
 							/*
@@ -255,7 +133,7 @@ namespace opt{
 					*/
 					
 					
-					opt::math::cpu::dgemm_nn(d,1,r.dim,-beta,A,1,r.dim,res,1,1,gfloat(1.0),x_dest,1,1);	
+					opt::math::cpu::dgemm_nn(d,1,xdim,-beta,A,1,xdim,res,1,1,gfloat(1.0),x_dest,1,1);	
 					f0_res=f0(x_dest,residual.begin());		
 					
 				
@@ -307,7 +185,7 @@ namespace opt{
 			
 			public:
 			
-			GNSCPU(gns::Residual<K,T,gns::HasJacInv::Yes>& _r,std::ostream& _os): r(_r),os(_os){
+			GNSCPU(U _r,U _j_t, U _j_t_j_inv,int _xdim, std::ostream& _os): r(_r), j_t(_j_t), j_t_j_inv(_j_t_j_inv),xdim(_xdim),os(_os){
 				//os<<"Hat alles geklappt, alter\n";
 			}
 			
@@ -321,7 +199,7 @@ namespace opt{
 				bool run_finished=false;
 				
 				//Test is parameters already minimize f0 according to tol
-				T residuals(r.dim);
+				T residuals(xdim);
 				gfloat fmin=f0(x0.begin(),residuals.begin()); //current minimum
 				
 				if (fmin<tol){
@@ -329,11 +207,11 @@ namespace opt{
 				}
 				else{
 					int d=x0.size();
-					T J_t(r.dim*d);
+					T J_t(xdim*d);
 					T grad(d);
 					T J_t_J_inv(d*d);
-					int n_threads=1;
-					T C(r.dim*d);
+
+					T C(xdim*d);
 					T xi(x0.begin(),x0.end());
 					T xs(d*n_threads);
 					gfloat alpha=0.7;		
@@ -342,17 +220,17 @@ namespace opt{
 					std::vector<std::thread> ts(n_threads);
 					gfloat curr_min;
 					
-					while (run_finished==false){
-						r.j_t(xi.begin(),J_t.begin());
-						r.j_t_j_inv(xi.begin(),J_t_J_inv.begin());
+					while (run_finished==false && (iter<max_iter)){
+						j_t(xi.begin(),J_t.begin());
+						j_t_j_inv(xi.begin(),J_t_J_inv.begin());
 		
-						opt::math::cpu::dgemm_nn(d,r.dim,d,gfloat(1.0),J_t_J_inv.begin(),1,d,J_t.begin(),1,r.dim,gfloat(0.0),C.begin(),1,r.dim);
+						opt::math::cpu::dgemm_nn(d,xdim,d,gfloat(1.0),J_t_J_inv.begin(),1,d,J_t.begin(),1,xdim,gfloat(0.0),C.begin(),1,xdim);
 						
 						
 						/*Calculate gradient from indices of jacobi matrix. Used for backtracking stepsize finding later*/
 						for (int i=0;i<d;i++){
 							gfloat sum=0;
-							for (int j=0;j<r.dim;j++){
+							for (int j=0;j<xdim;j++){
 								
 								sum+=*(J_t.begin()+j+i*d)*gfloat(2.0)* *(residuals.begin()+j);
 							}
@@ -373,7 +251,7 @@ namespace opt{
 							
 							for (int i=0;i<n_threads;i++){
 						//	std::cout<<"beta:"<<beta<<"lambda:"<<lambda<<"\t \t";
-							//	t[i]=std::thread(opt::math::cpu::dgemm_nn(d,1,r.dim,beta,C.begin(),1,r.dim,residuals.begin(),1,r.dim,gfloat(1.0),(xi.begin()),1,d);
+							//	t[i]=std::thread(opt::math::cpu::dgemm_nn(d,1,xdim,beta,C.begin(),1,xdim,residuals.begin(),1,xdim,gfloat(1.0),(xi.begin()),1,d);
 							
 			
 								ts[i]=std::thread(&GNSCPU::dgemm_and_residual,this,d,beta,C.begin(),xi.begin(),xs.begin()+i*d,residuals.begin(),std::ref(f0_vals[i]));
@@ -414,7 +292,7 @@ namespace opt{
 							if (bls(curr_min,fmin,betas[min_index],grad.begin(),xs.begin()+min_index,xs.begin()+min_index+d,xi.begin(),d)){
 								fmin=curr_min;
 								std::copy(xs.begin()+min_index,xs.begin()+min_index+d,xi.begin());
-								r.r(xi.begin(),residuals.begin());
+								r(xi.begin(),residuals.begin());
 								std::cout<<"Current error: "<<fmin<<"\n";
 								step_size_found=true;
 							}
@@ -427,14 +305,10 @@ namespace opt{
 						
 						if (fmin<=tol){
 							run_finished=true;
-
 							return {xi};
 						}
 				
 						iter++;
-						if (iter==4){
-							return {};
-						}
 
 					}
 					
@@ -446,58 +320,7 @@ namespace opt{
 		};
 
 
-	
-		export template<ValidContainer T,gns::ResidualSpec K>
-		class GNSCPU<T,K,gns::HasJacInv::No> {
 		
-			using gfloat=typename T::value_type;
-			
-			private:
-			gns::Residual<K,T,gns::HasJacInv::No>& r;
-			
-			gfloat tol=0.001;
-			
-			bool f0(T& params){
-			
-				T result(1);
-				T residuals(r.dim);
-				r.r(params,residuals.begin());	
-				opt::math::cpu::dgemm_nn(1,1,r.dim,gfloat(1.0),residuals.begin(),1,r.dim,residuals.begin(),1,1,gfloat(0.0),result.begin(),1,1);
-
-				if (result[0]>tol){
-					return false;
-				}
-				else{
-					return true;
-				}
-			}
-			
-			std::ostream& os;
-			
-			
-			public:
-			
-			GNSCPU(gns::Residual<K,T,gns::HasJacInv::No>& _r,std::ostream& _os): r(_r),os(_os){
-				//os<<"Hat alles geklappt, alter\n";
-			}
-			
-			
-			/*! Runs Gauss Newton's algorithm. Only this function has to be called to run the complete procedure.
-			@param[in] initial_params Initial parameters containing starting values for the procedure.
-			\return Code indicating success or failure of running the Gauss-Newton procedure.
-			*/
-			std::optional<T> run(T x0){
-				
-	
-				bool run_finished=false;
-				
-				//Test is parameters already minimize f0 according to tol
-
-				
-				
-			}
-
-		};	
 	}
 }
 
