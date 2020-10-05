@@ -11,12 +11,13 @@ ECHO Building executable
 ::Building core program
 ::cl /EHsc /c %curpath:~0,-1%\main.cpp
 nvcc %curpath:~0,-1%\..\gpu\gpu_blas.cu -c -o gpu_blas.obj
+nvcc %curpath:~0,-1%\..\gpu\gpu_gaussnewton.cu -c -o gpu_gaussnewton.obj
 cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\..\gpu\gpu_bindings.ixx
 cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\transformation.ixx
 cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\..\solvers\gaussnewton.ixx
 cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\..\gpu\gpu_gaussnewton.ixx
 cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\..\solvers\solvers.ixx
-cl /EHsc /experimental:module /std:c++latest  main.cpp gpu_blas.obj gpu_bindings.obj transformation.obj solvers.obj gaussnewton.obj /link /LIBPATH:"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.2\lib\x64\" cudart.lib
+cl /EHsc /experimental:module /std:c++latest  main.cpp gpu_blas.obj gpu_gaussnewton.obj gpu_bindings.obj transformation.obj solvers.obj gaussnewton.obj /link /LIBPATH:"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.2\lib\x64\" cudart.lib
 
 ::cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\..\cpu\transformation.ixx 
 

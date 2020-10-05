@@ -83,25 +83,26 @@ namespace opt{
 			U r;
 			U j_t;
 			U j_t_j_inv;
-			int xdim;
+			int rdim;
 			gfloat lambda=0.5; //determines, how much the step size is reduced at each iteration of the wolfe conditions
 			gfloat tol=0.001;
 			int n_threads=1;
 			int max_step_iter=60/n_threads; //maximum number of iterations during the stepsize finding process
 			int max_iter=300; //maximum number of iterations
 			gfloat c1=0.5;
+			
 			gfloat f0(typename T::const_iterator params,typename T::iterator residuals){
 			
 				T result(1);
 				r(params,residuals);	
-				opt::math::cpu::dgemm_nn(1,1,xdim,gfloat(1.0),residuals,1,xdim,residuals,1,1,gfloat(0.0),result.begin(),1,1);
+				opt::math::cpu::dgemm_nn(1,1,rdim,gfloat(1.0),residuals,1,rdim,residuals,1,1,gfloat(0.0),result.begin(),1,1);
 				
 				return *(result.begin());
 			}
 			
-			void dgemm_and_residual(size_t d ,gfloat beta,typename T::iterator A, typename T::iterator x_source, typename T::iterator x_dest, typename T::iterator res, gfloat& f0_res){
-					T residual(xdim);
-				std::copy(x_source,x_source+d,x_dest);
+			void dgemm_and_residual(size_t xdim ,gfloat beta,typename T::iterator A, typename T::iterator x_source, typename T::iterator x_dest, typename T::iterator res, gfloat& f0_res){
+					T residual(rdim);
+				std::copy(x_source,x_source+xdim,x_dest);
 					
 							/*
 					
@@ -133,7 +134,7 @@ namespace opt{
 					*/
 					
 					
-					opt::math::cpu::dgemm_nn(d,1,xdim,-beta,A,1,xdim,res,1,1,gfloat(1.0),x_dest,1,1);	
+					opt::math::cpu::dgemm_nn(xdim,1,rdim,-beta,A,1,rdim,res,1,1,gfloat(1.0),x_dest,1,1);	
 					f0_res=f0(x_dest,residual.begin());		
 					
 				
@@ -152,28 +153,28 @@ namespace opt{
 			std::ostream& os;
 			
 			//backtracking line search
-			bool bls(gfloat fnew, gfloat fmin, gfloat beta, typename T::iterator grad, typename T::iterator xb,typename T::iterator xe,typename T::iterator xpb, int d){
+			bool bls(gfloat fnew, gfloat fmin, gfloat beta, typename T::iterator grad, typename T::iterator xb,typename T::iterator xe,typename T::iterator xpb, int xdim){
 		//	std::cout<<"BLS: beta: "<<beta<<"\n";
-				T direction(d);
+				T direction(xdim);
 				std::transform(xb,xe,xpb, direction.begin(),std::minus<double>()); //not numerically stable but faster than doing the matrix calculations again
 			/*			
 				std::cout<<"xb:\n";
-				for (int i=0;i<d;i++){
+				for (int i=0;i<xdim;i++){
 				std::cout<<*(xb+i)<<"\t";
 				}
 				
 				std::cout<<"\nxp:\n";
-				for (int i=0;i<d;i++){
+				for (int i=0;i<xdim;i++){
 				std::cout<<*(xpb+i)<<"\t";
 				}
 				
 				std::cout<<"\n grad:\n";
-				for (int i=0;i<d;i++){
+				for (int i=0;i<xdim;i++){
 				std::cout<<*(grad+i)<<"\t";
 				}*/			
 				
 				T fk(1,fmin);
-				opt::math::cpu::dgemm_nn(1,1,d,c1,direction.begin(),1,d,grad,1,1,gfloat(1.0),fk.begin(),1,1);	
+				opt::math::cpu::dgemm_nn(1,1,xdim,c1,direction.begin(),1,xdim,grad,1,1,gfloat(1.0),fk.begin(),1,1);	
 				//std::cout<<"f new: "<<fnew <<" f(xk)"<<*(fk.begin())<<"\n";
 				if (fnew<=*(fk.begin())){
 					return true;
@@ -185,7 +186,7 @@ namespace opt{
 			
 			public:
 			
-			GNSCPU(U _r,U _j_t, U _j_t_j_inv,int _xdim, std::ostream& _os): r(_r), j_t(_j_t), j_t_j_inv(_j_t_j_inv),xdim(_xdim),os(_os){
+			GNSCPU(U _r,U _j_t, U _j_t_j_inv,int _rdim, std::ostream& _os): r(_r), j_t(_j_t), j_t_j_inv(_j_t_j_inv),rdim(_rdim),os(_os){
 				//os<<"Hat alles geklappt, alter\n";
 			}
 			
@@ -197,7 +198,7 @@ namespace opt{
 			std::optional<T> run(T x0){
 				
 				bool run_finished=false;
-				
+				int xdim=x0.size();
 				//Test is parameters already minimize f0 according to tol
 				T residuals(xdim);
 				gfloat fmin=f0(x0.begin(),residuals.begin()); //current minimum
@@ -206,14 +207,13 @@ namespace opt{
 					return {x0};
 				}
 				else{
-					int d=x0.size();
-					T J_t(xdim*d);
-					T grad(d);
-					T J_t_J_inv(d*d);
+					T J_t(xdim*rdim);
+					T grad(xdim);
+					T J_t_J_inv(xdim*xdim);
 
-					T C(xdim*d);
+					T C(xdim*rdim);
 					T xi(x0.begin(),x0.end());
-					T xs(d*n_threads);
+					T xs(xdim*n_threads);
 					gfloat alpha=0.7;		
 					int iter=0;
 					
@@ -223,16 +223,15 @@ namespace opt{
 					while (run_finished==false && (iter<max_iter)){
 						j_t(xi.begin(),J_t.begin());
 						j_t_j_inv(xi.begin(),J_t_J_inv.begin());
-		
-						opt::math::cpu::dgemm_nn(d,xdim,d,gfloat(1.0),J_t_J_inv.begin(),1,d,J_t.begin(),1,xdim,gfloat(0.0),C.begin(),1,xdim);
-						
+					
+						opt::math::cpu::dgemm_nn(xdim,rdim,xdim,gfloat(1.0),J_t_J_inv.begin(),1,xdim,J_t.begin(),1,rdim,gfloat(0.0),C.begin(),1,rdim);
 						
 						/*Calculate gradient from indices of jacobi matrix. Used for backtracking stepsize finding later*/
-						for (int i=0;i<d;i++){
+						for (int i=0;i<xdim;i++){
 							gfloat sum=0;
-							for (int j=0;j<xdim;j++){
+							for (int j=0;j<rdim;j++){
 								
-								sum+=*(J_t.begin()+j+i*d)*gfloat(2.0)* *(residuals.begin()+j);
+								sum+=*(J_t.begin()+j+i*rdim)*gfloat(2.0)* *(residuals.begin()+j);
 							}
 							*(grad.begin()+i)=sum;
 						}
@@ -254,7 +253,7 @@ namespace opt{
 							//	t[i]=std::thread(opt::math::cpu::dgemm_nn(d,1,xdim,beta,C.begin(),1,xdim,residuals.begin(),1,xdim,gfloat(1.0),(xi.begin()),1,d);
 							
 			
-								ts[i]=std::thread(&GNSCPU::dgemm_and_residual,this,d,beta,C.begin(),xi.begin(),xs.begin()+i*d,residuals.begin(),std::ref(f0_vals[i]));
+								ts[i]=std::thread(&GNSCPU::dgemm_and_residual,this,xdim,beta,C.begin(),xi.begin(),xs.begin()+i*xdim,residuals.begin(),std::ref(f0_vals[i]));
 								betas[i]=beta;
 								beta*=lambda;
 								
@@ -289,9 +288,9 @@ namespace opt{
 						//	std::cout<<"curr_min:"<<curr_min<<" fmin:"<<fmin<<"\n";
 						//	std::cout<<"min index:"<<min_index<<"\n";
 				
-							if (bls(curr_min,fmin,betas[min_index],grad.begin(),xs.begin()+min_index,xs.begin()+min_index+d,xi.begin(),d)){
+							if (bls(curr_min,fmin,betas[min_index],grad.begin(),xs.begin()+min_index,xs.begin()+min_index+xdim,xi.begin(),xdim)){
 								fmin=curr_min;
-								std::copy(xs.begin()+min_index,xs.begin()+min_index+d,xi.begin());
+								std::copy(xs.begin()+min_index,xs.begin()+min_index+xdim,xi.begin());
 								r(xi.begin(),residuals.begin());
 								std::cout<<"Current error: "<<fmin<<"\n";
 								step_size_found=true;
