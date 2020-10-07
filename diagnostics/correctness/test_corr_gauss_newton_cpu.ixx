@@ -185,7 +185,7 @@ namespace opt{
 			};
 			
 			export bool gauss_newton_example2(std::ostream& os, CorrectnessTest& v){
-				std::vector<double> x0={2.3,-0.3};
+				std::vector<double> x0={-0.3,-0.3};
 				Example2<std::vector<double>::const_iterator, std::vector<double>::iterator> c;
 				using std::placeholders::_1;
 				using std::placeholders::_2;
