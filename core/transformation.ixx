@@ -726,6 +726,63 @@ namespace opt{
 					}
 				}
 			}
+			
+			
+			/*Solves A=LDL^T with diagonal D and lower triangular L. Result is stored back into A (in place)
+			This function calculates a variant of the Cholesky decomposition. The traversal for the factors is 
+			column wise (Cholesky–Crout traversal).*/
+			export template<class T,class F>
+			void choi(size_t n, T A, int stride_row, int stride_col){
+				F* D=new F[n]();
+				for (int j=0;j<n;j++){
+					for (int i=0;i<j;i++){
+						D[j]-=A[j*stride_col+i]*A[j*stride_col+i]*D[i];
+					}
+					A[j*stride_col+j]+=D[j];
+					D[j]=A[j*n+j];
+					F D_inv=1/D[j];
+					for (int i=j+1;i<n;i++){	
+						F sum=0.0;		
+						for (int t=0;t<j;t++){
+							sum-=A[i*stride_col+t]*A[j*stride_col+t]*D[t];
+						}
+						
+						A[i*stride_col+j]+=sum;
+						A[i*stride_col+j]*=D_inv;
+						A[j*stride_col+i]=0.0; //can be removed if I don't want to have zeros
+					}
+				}
+			}
+			
+			/*Solves A=LDL^T with diagonal D and lower triangular L. Result is stored back into A (in place).
+			Important: In contrast to choi, this function assumes that the input matrix A is in triangular packed format,
+			i.e. only the lower triangle including the diagonal is stored.
+			This function calculates a variant of the Cholesky decomposition. The traversal for the factors is 
+			column wise (Cholesky–Crout traversal).*/
+			export template<class T,class F>
+			void choip(size_t n, T A, int stride_row, int stride_col){
+				F* D=new F[n]();
+				for (int j=0;j<n;j++){
+					int ix1=j*0.5*(j+1)+j*stride_col;
+					for (int i=0;i<j;i++){
+						D[j]-=A[ix1+i]*A[ix1+i]*D[i];
+						
+					}
+					A[ix1+j]+=D[j];
+					D[j]=A[ix1+j];
+					F D_inv=1/D[j];
+					for (int i=j+1;i<n;i++){
+						F sum=0.0;
+						int ix2=i*0.5*(i+1)+i*stride_col;
+						for (int t=0;t<j;t++){
+							sum-=A[ix2+t]*A[ix1+t]*D[t];
+						}
+						A[ix2+j]+=sum;
+						A[ix2+j]*=D_inv;
+					}
+				}
+				delete[] D;
+			}
 		
 		}
 	}

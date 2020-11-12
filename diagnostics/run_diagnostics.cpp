@@ -55,6 +55,7 @@ bool run_correctness_tests(std::ostream& os, bool save_metrics){
 	v.push_back(opt::test::CorrectnessTest("matrix_multiplication square dim(A)=(2,2), dim(B)=(2,2)",opt::test::corr::matrix_multiplication_1));
 	v.push_back(opt::test::CorrectnessTest("matrix_multiplication square dim(A)=(1000,1000), dim(B)=(1000,1000)",opt::test::corr::matrix_multiplication_2));
 	v.push_back(opt::test::CorrectnessTest("matrix_multiplication dim(A)=(425,17), dim(B)=(17,31)",opt::test::corr::matrix_multiplication_3));
+	v.push_back(opt::test::CorrectnessTest("cholseky LDL dim(A)=(3,3)",opt::test::corr::cholesky_1));
 	
 	bool result=true;
 	
