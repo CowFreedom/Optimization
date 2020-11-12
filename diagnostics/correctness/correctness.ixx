@@ -6,6 +6,7 @@ module;
 #include <filesystem>
 export module tests.correctness;
 export import :gauss_newton.cpu;
+export import :transformation;
 
 import tests;
 

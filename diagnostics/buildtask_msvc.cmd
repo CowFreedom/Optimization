@@ -19,7 +19,8 @@ cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\tests.ixx
 cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\performance/test_perf_transform.ixx 
 cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\performance/performance.ixx 
 cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\correctness/test_corr_gauss_newton_cpu.ixx 
+cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\correctness/test_corr_transformation.ixx 
 cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\correctness/correctness.ixx 
-cl /EHsc /experimental:module /std:c++latest %curpath:~0,-1%\run_diagnostics.cpp %curpath:~0,-1%\tests.obj %curpath:~0,-1%\performance.obj %curpath:~0,-1%\test_perf_transform.obj  %curpath:~0,-1%\correctness.obj  %curpath:~0,-1%\test_corr_gauss_newton_cpu.obj
+cl /EHsc /experimental:module /std:c++latest %curpath:~0,-1%\run_diagnostics.cpp %curpath:~0,-1%\tests.obj %curpath:~0,-1%\performance.obj %curpath:~0,-1%\test_perf_transform.obj  %curpath:~0,-1%\correctness.obj  %curpath:~0,-1%\test_corr_gauss_newton_cpu.obj %curpath:~0,-1%\test_corr_transformation.obj
 del /f *.ifc *.obj
 

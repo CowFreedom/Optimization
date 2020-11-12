@@ -292,7 +292,7 @@ namespace opt{
 								fmin=curr_min;
 								std::copy(xs.begin()+min_index,xs.begin()+min_index+xdim,xi.begin());
 								r(xi.begin(),residuals.begin());
-								std::cout<<"Current error: "<<fmin<<"\n";
+							//	std::cout<<"Current error: "<<fmin<<"\n";
 								step_size_found=true;
 							}
 										

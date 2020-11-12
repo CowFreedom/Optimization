@@ -4,6 +4,7 @@ module;
 #include <random>
 #include <chrono>
 #include <iostream>
+#include <fstream>
 export module tests;
 
 namespace opt{
@@ -86,6 +87,63 @@ namespace opt{
 				}
 				os << "\n";
 			}
+		}
+		
+		
+		/*Merges files in a given path. Merging is done sequentially in order of the input files.
+		in: path of the folder with files to be merged
+
+		fix: fixed columnnames
+		out: Container object that implements push_back
+		delimiter: delimiting string
+		ParseType: Type to be parsed*/
+		export template<class T>
+		bool parse_csv(std::string filepath, T out, int length, std::string delimiter) {
+			std::ifstream file(filepath);
+			if (file.fail()) {
+				std::cerr << "Couldn't open  " << filepath << "\n";
+				return false;
+			}
+			
+			std::string line;
+			//std::array<char,64> numbuf;
+			char numbuf[64];
+			bool in_digit = 0;
+			
+			int curr=0;
+
+			while (std::getline(file, line)) {
+				//Skip if line starts with a comment #
+				if (line.front() == '#') {
+					continue;
+				}
+				size_t bufsize = 0;
+				line.push_back('\n'); //add last delimiter so that number parsing is correct
+				for (auto& x : line) {
+					if (in_digit) {
+						if (isdigit(x) || x == '.' || x == 'e' || x == '-' || x == '+') {
+							numbuf[bufsize] = x;
+							bufsize++;
+						}
+						else {
+							in_digit = false;
+							numbuf[bufsize] = '\0';
+							out[curr]=std::atof(numbuf);
+							curr++;
+							bufsize = 0;
+						}
+					}
+					else {
+						if (isdigit(x) || x == '.' || x == '-' || x == '+') {
+							in_digit = true;
+							numbuf[bufsize] = x;
+							bufsize++;
+						}
+					}
+				}
+
+			}
+			return true;
 		}
 
 	
