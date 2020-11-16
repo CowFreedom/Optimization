@@ -727,6 +727,192 @@ namespace opt{
 				}
 			}
 			
+						/*DGMV algorithm
+			*/
+			/*
+			Compute y += alpha*x
+			y and x are vectors
+			See https://www5.in.tum.de/lehre/vorlesungen/parnum/WS10/PARNUM_4.pdf for an explanation
+			*/
+			template<class T, class F>
+			void saxpy(size_t m,F alpha, T x,size_t stride_x, T y, size_t stride_y) {
+				for (int j = 0; j < m; ++j) {
+							y[j * stride_y] += alpha*x[j * stride_x];
+					//		std::cout<<alpha<<" times "<<x[j*stride_x]<<"\n";
+				}
+			}
+
+			/*
+			Compute y += alpha_i*x
+			y is a vector and X a matrix
+			*/
+			template<class T, class F>
+			void gaxpy(size_t m, size_t n, F alpha, T X, size_t stride_row_x, size_t stride_col_x,T y, size_t stride_y,  T c, size_t stride_c) {
+				//std::cout<<"in gaxpy\n";
+				for (int i=0;i<n;i++){
+					saxpy(m, alpha*y[i*stride_y], X,stride_col_x,c,stride_c);
+					X+=stride_row_x;
+				}
+						
+			}
+
+				
+			template<class T, class F>
+			void dgmv_explicit(size_t m, size_t n,F alpha, T A, size_t stride_row_a, size_t stride_col_a,
+				T y, size_t stride_y, F beta, T c, size_t stride_c){
+					//gaxpy(m,n,alpha,A,stride_row_a,stride_col_a,y,stride_y,c,stride_c);
+					
+					for (int i=0;i<m;i++){
+						c[i*stride_c]*=beta;
+						for (int j=0;j<n;j++){
+							c[i*stride_c]+=alpha*A[i*stride_col_a+j*stride_row_a]*y[j*stride_y];
+						}
+					}			
+			}
+		
+		
+			
+			template<class T, class F>
+			void dgmv(size_t m, size_t n,F alpha, T A, size_t stride_row_a, size_t stride_col_a,
+				T y, size_t stride_y, F beta, T c, size_t stride_c){
+					if (alpha == F(0.0)) {
+					return;
+					}
+					
+					if (m<1500 && n<15000){
+						for (int i=0;i<m;i++){
+							c[i*stride_c]*=beta;
+							for (int j=0;j<n;j++){
+								c[i*stride_c]+=alpha*A[i*stride_col_a+j*stride_row_a]*y[j*stride_y];
+							}
+						}						
+					}
+					else{
+						int n_threads=std::thread::hardware_concurrency();
+						int rem=0;
+						T cs=c;	
+
+						int chunkM;
+								
+						T As=A;							
+									
+						if (m>n_threads){
+							chunkM=m/n_threads; //number of rows per thread
+							rem=m%n_threads;
+						}
+						else{
+							n_threads=m;
+							chunkM=1;
+						}
+						std::vector<std::thread> ts(n_threads);	
+						int leftover=(rem==0)?m-(n_threads-1)*chunkM:m-(n_threads-1-rem)*chunkM-rem*(chunkM+1);
+						for (int i=0;i<(n_threads-1);i++){
+							if (rem==0){
+								ts[i]=std::thread(dgmv_explicit<T,F>,chunkM,n,alpha,As,stride_row_a,stride_col_a,y,stride_y,beta,cs,stride_c); //there are no matrix A, B to multiply C with
+								As+=stride_col_a*chunkM;
+								cs+=chunkM;
+							}
+							else{
+								ts[i]=std::thread(dgmv_explicit<T,F>,chunkM+1,n,alpha,As,stride_row_a,stride_col_a,y,stride_y,beta,cs,stride_c); //there are no matrix A, B to multiply C with
+								As+=stride_col_a*(chunkM+1);
+								cs+=chunkM+1;				
+								rem--;
+							}
+						}
+						
+						ts[n_threads-1]=std::thread(dgmv_explicit<T,F>,leftover,n,alpha,As,stride_row_a,stride_col_a,y,stride_y,beta,cs,stride_c);
+											
+
+						for (auto& x: ts){
+							x.join();
+						}
+					}
+					
+			}
+
+			
+			/*microkernel for packed triangular matrix (pt) C and nonpacked buffer matrices A,B that represent lower triangular L1 and upper triangular L2.
+			Because the result of L1L2 can be dense, it is assumed that C is a panel inside a bigger matrix multiplication, therefore stride_col_c cannot be zero*/
+			template<class T, class F>
+			void dgeaxpy_pt(size_t m, size_t n, F alpha, F* X, size_t stride_row_x, size_t stride_col_x, T Y, size_t stride_row_y, size_t stride_col_y) {
+				if (alpha != F(1.0)) {
+					for (int j = 0; j < m; ++j) {
+						for (int i = 0; i < n; ++i) {
+							Y[i * stride_row_y + j * stride_col_y] += alpha * X[i * stride_row_x + j * stride_col_x];
+						}
+					}
+				}
+				else {
+					for (int j = 0; j < m; ++j) {
+						int offset=0;
+						for (int i = 0; i < n; ++i) {
+							if (i>=2){
+								offset++; //the result C is in the middle of the packed Matrix AB. Therefore we have to add an increasing offset to account for triangular packed form
+							}
+							size_t ix=j*0.5*(j+1)+j*stride_col_y+offset;
+							Y[i * stride_row_y + ix] += X[i * stride_row_x + j * stride_col_x];
+						}
+					}
+				}
+			}
+			
+			/*Copies from array source to dest*/
+			template<class T>
+			void dcopy(int m, int n, T source, size_t stride_row_source, size_t stride_col_source, T dest, size_t stride_row_dest,size_t stride_col_dest){
+				for (int i=0;i<m;i++){
+					for (int j=0;j<n;j++){
+						dest[i*stride_col_dest+j*stride_row_dest]=source[i*stride_col_source+j*stride_row_source];
+					}
+				}
+			}
+
+			//https://www.cs.cornell.edu/cv/ResearchPDF/High.Perf.GEMM.Based.Level3.BLAS.pdf
+			template<class T, class F>
+			void dysrk(int n, int k, F alpha, F beta, T C, int stride_row_c, int stride_col_c,T Ct, int stride_row_ct, int stride_col_ct){
+				int DR=2;
+				int row_start=0; //start position of rows (row start)
+				int height_rows=(DR<n)?DR:n; //current vertical size of the row panel (height of the row panel)
+				
+				int DC=3; 
+				T Cs=C;
+				T Cts=Ct;
+				F* _C=new F[DR*DC]();
+				
+				std::cout<<"C:\n";
+				printmat(C,n,k);
+				
+				while (row_start<=n){
+					int col_start=0; //start position of the columns
+					int width_cols=((col_start+DC)<=k)?DC:k-col_start; //width of the columns
+					while (col_start<k){
+						dcopy(height_rows,width_cols,Cs,stride_row_c, stride_col_c,_C,1,width_cols);
+					//	std::cout<<"_C:\n";
+					//	printmat(_C,height_rows,width_cols);
+						for (int i=0;i<height_rows;i++){
+							dgmv(i+1,width_cols,alpha,Cs,stride_row_c,stride_col_c,
+							_C+i*(width_cols),1, 1.0, Cts+i, stride_col_ct);
+						//	std::cout<<"i+1:"<<i+1<<"j:"<<width_cols<<"\n";
+						}
+					//	std::cout<<"Cts:\n";
+					//	printmat(Cts,n,n);
+					//	std::cin.get();
+						col_start+=width_cols;
+						Cs+=width_cols;
+						width_cols=((col_start+width_cols)<k)?width_cols:k-col_start;
+					}
+					std::cout<<"left";
+					return;
+				//	std::cin.get();
+					//Cs+=col_start;
+					//dgemm_nn(height_rows,n-height_rows,k-(col_start-width_cols+1),alpha,Cs+height_rows*k,1,k,Cs+(col_start-width_cols+1),1,k,beta,Cts+col_start,1,n);
+					//Cs+=height_rows*stride_col_c;
+					//s+=e+1;
+					//e=((s+DR-1)<n)?s+DR-1:n;
+					//Cs+=k*
+				}
+				
+			}
+			
 			
 			/*Solves A=LDL^T with diagonal D and lower triangular L. Result is stored back into A (in place)
 			This function calculates a variant of the Cholesky decomposition. The traversal for the factors is 
