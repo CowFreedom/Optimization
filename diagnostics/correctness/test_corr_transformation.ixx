@@ -51,6 +51,39 @@ namespace opt{
 				return true;
 			}
 			
+			template<class T, class F>
+			bool verify_upperlower(const T C1, const T C2, int n, const char selection, F tol){
+				switch (selection){
+					case 'U':{
+							for (int i=0;i<n;i++){
+								for (int j=i;j<n;j++){
+									if (std::abs(C1[i*n+j]-C2[i*n+j])>tol){
+									//std::cin.get();
+									return false;
+								}
+								}
+								
+							}
+							
+							break;		
+					}
+					
+					case 'L':{
+							for (int i=0;i<n;i++){
+								for (int j=0;j<i;j++){
+									if (std::abs(C1[i*n+j]-C2[i*n+j])>tol){
+									return false;
+								}
+								}	
+							}
+							
+							break;		
+					}	
+				}
+
+				return true;
+			}
+			
 			
 			export bool matrix_multiplication_1(std::ostream& os, CorrectnessTest& v){
 				int m=2;
@@ -119,7 +152,7 @@ namespace opt{
 				int n=17;
 				int k=31;
 				double alpha=1.0;
-				double beta=0;
+				double beta=1.0;
 
 				double* A1=new double[m*k];
 				double* B1=new double[n*k];
@@ -145,6 +178,43 @@ namespace opt{
 				return false;
 			}
 			
+			export bool matrix_multiplication_4(std::ostream& os, CorrectnessTest& v){
+
+				std::random_device rd;				
+					
+				std::uniform_real_distribution<> dist(1,300); // distribution in range [1, 6];		
+
+				bool is_correct;
+				for (int i=0;i<20;i++){
+					int n=dist(rd);
+					int k=dist(rd);
+					double beta=0;		
+					double alpha=-2.0;
+					double* A=new double[n*k];
+					double* control=new double[n*n];
+					double* res=new double[n*n];
+
+					opt::test::fill_container_randomly<double*,double>(rd, A,n*k);
+					opt::math::cpu::dysrk(n, k,alpha, beta, A, 1, k,res,1,n);		
+					opt::math::cpu::dgemm_nn(n,n,k,alpha,A,1,k,A,k,1,beta,control,1,n); //calculate control result, AA^T=C
+					is_correct=verify_upperlower(control, res,n, 'U', 0.0001);
+					delete[] A;
+					delete[] control;
+					delete[] res;	
+					if (is_correct==false){
+						return false;
+					}
+		
+				}
+
+				if (is_correct){
+					v.test_successful=true;
+					return true;
+				}	
+				return false;
+			}	
+
+	
 			//Tests is choi and choip are equal and calculate the correct result
 			export bool cholesky_1(std::ostream& os, CorrectnessTest& v){
 				int n=3;

@@ -119,7 +119,7 @@ namespace opt{
 				for (size_t i = 0; i < q; i++) {
 					pack_KXnr(kc, B, buffer, stride_rows, stride_cols);
 				//	std::cout << "i:" <<  i<< "\n";
-					B += NR;
+					B += NR*stride_rows;
 					buffer += kc * NR;
 
 				}
@@ -867,7 +867,8 @@ namespace opt{
 			}
 
 			//https://www.cs.cornell.edu/cv/ResearchPDF/High.Perf.GEMM.Based.Level3.BLAS.pdf
-			template<class T, class F>
+			//beta geht grad nicht im triangleteil
+			export template<class T, class F>
 			void dysrk(int n, int k, F alpha, F beta, T C, int stride_row_c, int stride_col_c,T Ct, int stride_row_ct, int stride_col_ct){
 				int DR=2;
 				int row_start=0; //start position of rows (row start)
@@ -878,40 +879,33 @@ namespace opt{
 				T Cts=Ct;
 				F* _C=new F[DR*DC]();
 				
-				std::cout<<"C:\n";
-				printmat(C,n,k);
-				
-				while (row_start<=n){
+				while (height_rows>0){
 					int col_start=0; //start position of the columns
 					int width_cols=((col_start+DC)<=k)?DC:k-col_start; //width of the columns
 					while (col_start<k){
 						dcopy(height_rows,width_cols,Cs,stride_row_c, stride_col_c,_C,1,width_cols);
-					//	std::cout<<"_C:\n";
-					//	printmat(_C,height_rows,width_cols);
 						for (int i=0;i<height_rows;i++){
 							dgmv(i+1,width_cols,alpha,Cs,stride_row_c,stride_col_c,
 							_C+i*(width_cols),1, 1.0, Cts+i, stride_col_ct);
-						//	std::cout<<"i+1:"<<i+1<<"j:"<<width_cols<<"\n";
 						}
-					//	std::cout<<"Cts:\n";
-					//	printmat(Cts,n,n);
-					//	std::cin.get();
 						col_start+=width_cols;
 						Cs+=width_cols;
 						width_cols=((col_start+width_cols)<k)?width_cols:k-col_start;
 					}
-					std::cout<<"left";
-					return;
-				//	std::cin.get();
-					//Cs+=col_start;
-					//dgemm_nn(height_rows,n-height_rows,k-(col_start-width_cols+1),alpha,Cs+height_rows*k,1,k,Cs+(col_start-width_cols+1),1,k,beta,Cts+col_start,1,n);
-					//Cs+=height_rows*stride_col_c;
-					//s+=e+1;
-					//e=((s+DR-1)<n)?s+DR-1:n;
-					//Cs+=k*
+					
+					Cs=C+row_start*stride_col_c;
+					if((n-row_start-height_rows)>0){
+					dgemm_nn(height_rows,n-row_start-height_rows,k,alpha,Cs,1,k,Cs+height_rows*stride_col_c,k,1,beta,Cts+height_rows*stride_row_ct,1,n);			
+					}
+					Cs+=height_rows*stride_col_c;
+					Cts+=height_rows*stride_col_ct+height_rows*stride_row_ct;
+					row_start+=height_rows;
+					height_rows=(row_start+DR<n)?DR:n-row_start;	
+			
 				}
-				
-			}
+
+					
+				}
 			
 			
 			/*Solves A=LDL^T with diagonal D and lower triangular L. Result is stored back into A (in place)
