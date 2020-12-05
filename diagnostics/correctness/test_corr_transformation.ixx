@@ -195,7 +195,7 @@ namespace opt{
 					double* res=new double[n*n];
 
 					opt::test::fill_container_randomly<double*,double>(rd, A,n*k);
-					opt::math::cpu::dysrk(n, k,alpha, beta, A, 1, k,res,1,n);		
+					opt::math::cpu::syurk(n, k,alpha, A, 1, k,beta,res,1,n);	
 					opt::math::cpu::dgemm_nn(n,n,k,alpha,A,1,k,A,k,1,beta,control,1,n); //calculate control result, AA^T=C
 					is_correct=verify_upperlower(control, res,n, 'U', 0.0001);
 					delete[] A;
@@ -214,6 +214,41 @@ namespace opt{
 				return false;
 			}	
 
+			export bool matrix_multiplication_5(std::ostream& os, CorrectnessTest& v) {
+
+				std::random_device rd;
+
+				std::uniform_real_distribution<> dist(1, 300); // distribution in range [1, 6];		
+
+				bool is_correct;
+				for (int i = 0; i < 20; i++) {
+					int n = dist(rd);
+					int k = dist(rd);
+					double beta = 0;
+					double alpha = -2.0;
+					double* A = new double[n * k];
+					double* control = new double[n * n];
+					double* res = new double[n * n];
+
+					opt::test::fill_container_randomly<double*, double>(rd, A, n * k);
+					opt::math::cpu::sylrk(n, k, alpha, A, 1, k, beta, res, 1, n);
+					opt::math::cpu::dgemm_nn(n, n, k, alpha, A, 1, k, A, k, 1, beta, control, 1, n); //calculate control result, AA^T=C
+					is_correct = verify_upperlower(control, res, n, 'L', 0.0001);
+					delete[] A;
+					delete[] control;
+					delete[] res;
+					if (is_correct == false) {
+						return false;
+					}
+
+				}
+
+				if (is_correct) {
+					v.test_successful = true;
+					return true;
+				}
+				return false;
+			}
 	
 			//Tests is choi and choip are equal and calculate the correct result
 			export bool cholesky_1(std::ostream& os, CorrectnessTest& v){
@@ -256,6 +291,57 @@ namespace opt{
 					v.test_successful=true;
 					return true;
 				}	
+				return false;
+			}
+			export bool cholesky_solve(std::ostream& os, CorrectnessTest& v) {
+
+				std::random_device rd;
+
+				std::uniform_real_distribution<> dist(1, 300); // distribution in range [1, 6];		
+
+				bool is_correct;
+				for (int i = 0; i < 20; i++) {
+					int n = dist(rd);
+					int k = dist(rd);
+					double beta = 0;
+					double alpha = 1.0;
+					double* A = new double[n * k];
+					double* C = new double[n * n];
+					double* C_copy = new double[n * n];
+					opt::test::fill_container_randomly<double*, double>(rd, A, n * k);
+					//Create symmetric matrix C
+					opt::math::cpu::sylrk(n, k, alpha, A, 1, k, beta, C, 1, n);
+
+					for (int i = 0; i < n * n; i++) {
+						C_copy[i] = C[i];
+					}
+					opt::math::cpu::choi<double*, double>(n, C, 1, n);
+
+					double* b = new double[n];
+					double* x = new double[n];
+					double* res = new double[n];
+					opt::test::fill_container_randomly<double*, double>(rd, b, n);
+
+				//	opt::math::cpu::choi_solve(n, C, 1, n, b, 1, x, 1); //HINZUFÜGEN; TEMPLATES BEACHTEN
+
+					opt::math::cpu::dgmv(n,n, 1.0, A, 1, n,x,1, 0.0, res,1);
+					is_correct = verify_calculation(b,res, n, 0.1);
+					delete[] A;
+					delete[] C;
+					delete[] b;
+					delete[] C_copy;
+					delete[] x;
+					delete[] res;
+					if (is_correct == false) {
+						return false;
+					}
+
+				}
+
+				if (is_correct) {
+					v.test_successful = true;
+					return true;
+				}
 				return false;
 			}
 		

@@ -545,7 +545,7 @@ namespace opt{
 					dgescal(m, n, beta, C, stride_row_c, stride_col_c); //there are no matrix A, B to multiply C with
 					return;
 				}
-				else if(m<1 && n<1){
+				else if(m<500 && n<500){
 				
 				double* _A=new double[KC * MC];
 				double* _B= new double[KC * NC];
@@ -772,7 +772,7 @@ namespace opt{
 		
 		
 			
-			template<class T, class F>
+			export template<class T, class F>
 			void dgmv(size_t m, size_t n,F alpha, T A, size_t stride_row_a, size_t stride_col_a,
 				T y, size_t stride_y, F beta, T c, size_t stride_c){
 					if (alpha == F(0.0)) {
@@ -866,46 +866,643 @@ namespace opt{
 				}
 			}
 
-			//https://www.cs.cornell.edu/cv/ResearchPDF/High.Perf.GEMM.Based.Level3.BLAS.pdf
-			//beta geht grad nicht im triangleteil
-			export template<class T, class F>
-			void dysrk(int n, int k, F alpha, F beta, T C, int stride_row_c, int stride_col_c,T Ct, int stride_row_ct, int stride_col_ct){
-				int DR=2;
-				int row_start=0; //start position of rows (row start)
-				int height_rows=(DR<n)?DR:n; //current vertical size of the row panel (height of the row panel)
-				
-				int DC=3; 
-				T Cs=C;
-				T Cts=Ct;
-				F* _C=new F[DR*DC]();
-				
-				while (height_rows>0){
-					int col_start=0; //start position of the columns
-					int width_cols=((col_start+DC)<=k)?DC:k-col_start; //width of the columns
-					while (col_start<k){
-						dcopy(height_rows,width_cols,Cs,stride_row_c, stride_col_c,_C,1,width_cols);
-						for (int i=0;i<height_rows;i++){
-							dgmv(i+1,width_cols,alpha,Cs,stride_row_c,stride_col_c,
-							_C+i*(width_cols),1, 1.0, Cts+i, stride_col_ct);
-						}
-						col_start+=width_cols;
-						Cs+=width_cols;
-						width_cols=((col_start+width_cols)<k)?width_cols:k-col_start;
+
+
+			//rausfinden bedeutung  checken auf korrektheit
+			template<class T, class F>
+			void truscal(int m, int n, F alpha, T A, int stride_row_a, int stride_col_a) {
+				int k = std::min(m, n);
+				for (int i = 0; i < k; i++) {
+					for (int j = i; j < n; j++) {
+						A[i * stride_col_a + j * stride_row_a] *= alpha;
 					}
-					
-					Cs=C+row_start*stride_col_c;
-					if((n-row_start-height_rows)>0){
-					dgemm_nn(height_rows,n-row_start-height_rows,k,alpha,Cs,1,k,Cs+height_rows*stride_col_c,k,1,beta,Cts+height_rows*stride_row_ct,1,n);			
-					}
-					Cs+=height_rows*stride_col_c;
-					Cts+=height_rows*stride_col_ct+height_rows*stride_row_ct;
-					row_start+=height_rows;
-					height_rows=(row_start+DR<n)?DR:n-row_start;	
-			
 				}
 
-					
+			}
+
+			//Y=alpha*X for upper trianguar X
+			template<class T, class F>
+			void truaxpy(int m, int n, F alpha, T X, int  stride_row_x, int stride_col_x, T Y, int  stride_row_y, int stride_col_y) {
+				for (int i = 0; i < n; i++) {
+					for (int j = 0; j < std::min(i + 1, m); j++) {
+						Y[j * stride_col_y + i * stride_row_y] += alpha * X[j * stride_col_x + i * stride_row_x];
+
+					}
 				}
+			}
+
+			//A is in column major form and B is in row major form (i.e. A was packed by the function pack_A and B by pack_B)
+			template<class T, class F>
+			void syurk_micro_kernel(int mr, int nr, int kc, int ic, int jc, F alpha, const F* _A, const F* _B, F beta, T C, int stride_row_c, int stride_col_c) {
+
+				F AB[MR * NR];
+				dgemm_micro_kernel(kc, alpha, _A, _B, F(0.0), AB, 1, NR);
+				//	std::cout<<"AB draußen:\n";
+				//	printmat(AB,MR,NR);
+					//NR>MR
+				if (jc > ic) {
+					dgescal(jc - ic, nr, beta, C, stride_row_c, stride_col_c);
+					dgeaxpy(jc - ic, nr, F(1.0), AB, 1, NR, C, stride_row_c, stride_col_c);
+					truscal(mr - (jc - ic), nr, beta,
+						C + (jc - ic) * stride_col_c, stride_row_c, stride_col_c);
+					truaxpy(mr - (jc - ic), nr, 1.0,
+						AB + (jc - ic) * NR, 1, NR,
+						C + (jc - ic) * stride_col_c, stride_row_c, stride_col_c);
+					/*
+					dgescal(jc-ic, nr, beta, C, stride_row_c, stride_col_c);
+					dgeaxpy(jc-ic, nr, F(1.0), AB, 1, NR, C, stride_row_c, stride_col_c);
+					truscal(mr-(jc-ic), nr, beta,
+							C+(jc-ic)*stride_row_c, stride_row_c, stride_col_c);
+					truaxpy(mr-(jc-ic), nr, 1.0,
+							AB+(jc-ic), 1, NR,
+							C+(jc-ic)*stride_row_c,stride_row_c, stride_col_c);
+							*/
+							//std::cout<<"jc-ic"<<jc-ic<<"\n";
+						//	std::cin.get();
+									//MR>NR		
+				}
+				else {
+					truscal(mr, nr - (ic - jc), beta,
+						C + (ic - jc) * stride_row_c, stride_row_c, stride_col_c);
+					truaxpy(mr, nr - (ic - jc), 1.0,
+						AB + (ic - jc), 1, NR,
+						C + (ic - jc) * stride_row_c, stride_row_c, stride_col_c);
+					/*
+					truscal(mr, nr-(ic-jc), beta,
+							C, stride_row_c, stride_col_c);
+					truaxpy(mr, nr-(ic-jc), 1.0,
+							AB, 1, NR,
+							C,stride_row_c, stride_col_c);
+	*/
+
+	/*
+	//original
+	truscal(mr, nr-(ic-jc), beta,
+			C+(ic-jc)*stride_row_c, stride_row_c, stride_col_c);
+	truaxpy(mr, nr-(ic-jc), 1.0,
+			AB+(ic-jc), 1, NR,
+			C+(ic-jc)*stride_row_c,stride_row_c, stride_col_c);
+			*/
+				}
+
+
+				//   std::cin.get();
+
+			}
+
+			template<class T, class F>
+			void syurk_macro_kernel(size_t mc, size_t nc, size_t kc, F alpha, F beta, F* _A, F* _B, T C, F* _C, size_t stride_row_c, size_t stride_col_c) {
+				size_t q_m = (mc + MR - 1) / MR; //we add MR-1 and then floor the result, so that e.g. a 3 x 3 matrix still has a panel if MR>3
+				size_t q_n = (nc + NR - 1) / NR;
+				//std::cout << "in macro kernel\n";
+				size_t r_m = mc % MR;
+				size_t r_n = nc % NR;
+				//If MR!=NR, we may have to adjust for the different sizes accordingly
+				int ki = (MR < NR) ? NR / MR : 1;  // 2
+				int kj = (MR > NR) ? MR / NR : 1;  // 1
+
+				for (size_t j = 0; j < q_n; j++) {
+					size_t nr = ((j != q_n - 1) || (r_n == 0)) ? NR : r_n;
+					for (size_t i = 0; (i / ki) <= (j / kj); i++) {
+						size_t mr = ((i != q_m - 1) || (r_m == 0)) ? MR : r_m;
+						/*
+						std::cout<<"zu multiplizierende Matrizen:\n";
+						std::cout<<"_A=\n";
+						printmat(_A+i*kc*MR,MR,kc);
+						std::cout<<"\n _B=\n";
+						printmat(_B+j*kc*NR,kc,NR);
+						std::cin.get();
+						*/
+						size_t inc_c = i * stride_col_c * MR + j * stride_row_c * NR;
+						if ((i / ki) == (j / kj)) {
+							syurk_micro_kernel(mr, nr, kc, i * MR, j * NR, alpha, (_A + i * kc * MR), _B + j * kc * NR, beta, C + inc_c, stride_row_c, stride_col_c);
+						}
+						else {
+							if (mr == MR && nr == NR) {
+								dgemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, beta, C + inc_c, stride_row_c, stride_col_c);
+							}
+							else {
+								dgemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, F(0.0), _C, 1, NR);
+								dgescal(mr, nr, beta, C + inc_c, stride_row_c, stride_col_c);
+								dgeaxpy(mr, nr, F(1.0), _C, 1, NR, C + inc_c, stride_row_c, stride_col_c);
+							}
+						}
+
+					}
+
+				}
+			}
+
+			//https://github.com/michael-lehn/ulmBLAS/blob/master/ulmblas/level3/syurk.tcc
+			template<class T, class F>
+			void syurk_explicit(F alpha, T A, int stride_row_a, int stride_col_a, F beta, T C, int stride_row_c, int stride_col_c, int m_max, int r_m_max, int q_m, int q_k, int r_m, int r_k, int offset) {
+				//	std::cout<<"explicit:"<<r_m_max<<"\n";
+				F* _A = new F[MC * MC]();
+				F* _B = new F[MC * MC]();
+				F* _C = new double[MC * MC]();
+				for (int j = 0; j < m_max; j++) {
+
+					int nc = (j != m_max - 1 || r_m_max == 0) ? MC : r_m_max;
+					for (int l = 0; l < q_k; l++) {
+						int kc = (l != q_k - 1 || r_k == 0) ? MC : r_k;
+						int inc_a = j * stride_col_a * MC + l * MC * stride_row_a;
+						/*std::cout<<"rm max"<<r_m_max<<"\n";
+						std::cout<<"m_max:"<<m_max<<"\n";
+						std::cout<<"qk:"<<q_k<<"l:"<<l<<"\n";
+						std::cout<<"nca:"<<nc<<"kc"<<kc<<"\n";
+
+						std::cout<<A[inc_a]<<"\n";
+						*/
+						pack_A(nc, kc, A + inc_a, stride_row_a, stride_col_a, _A);
+						/*
+						std::cout<<"_A\n";
+						printmat(_A,MC,MC);
+						std::cout<<"\n";
+						*/
+						F _beta = (l == 0) ? beta : F(1.0);
+						for (int i = j; i < q_m - offset; i++) {
+							int mc = (i != (q_m - (offset)) - 1 || r_m == 0) ? MC : r_m;
+							int inc_b = i * stride_col_a * MC + l * MC * stride_row_a;
+							pack_B(kc, mc, A + inc_b, stride_col_a, stride_row_a, _B);
+							/*std::cout<<"kcb:"<<kc<<"mc:"<<mc<<"q_m-m_max*index"<<offset<<"\n";
+							std::cout<<"B[inc]"<<A[inc_b]<<"\n";
+							printmat(_B,MC,MC);
+							std::cout<<"\n";
+							*/
+							int inc_c = j * MC * stride_col_c + i * MC * stride_row_c;
+
+							if (i != j) {
+								dgemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+								//std::cout<<"damit fertig\n";
+							}
+							else {
+								syurk_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+							}
+						}
+					}
+					//std::cout<<"C:\n";
+	//printmat(C,17,17);
+
+
+	//std::cin.get();
+				}
+				delete[] _A;
+				delete[] _B;
+				delete[] _C;
+
+			}
+
+			//https://github.com/michael-lehn/ulmBLAS/blob/master/ulmblas/level3/syurk.tcc
+			template<class T, class F>
+			void syurk_single(int n, int k, F alpha, T A, int stride_row_a, int stride_col_a, F beta, T C, int stride_row_c, int stride_col_c) {
+				if (alpha == F(0.0) || k == 0) {
+					truscal(n, n, beta, C, stride_row_c, stride_col_c); //there are no matrix A, B to add to C with
+					return;
+				}
+
+				int q_m = (n + MC - 1) / MC; //number of vertical blocks of A
+				int q_k = (k + MC - 1) / MC;
+
+				int r_m = n % MC;
+				int r_k = k % MC;
+
+				F* _A = new F[MC * MC]();
+				F* _B = new F[MC * MC]();
+				F* _C = new double[MC * MC]();
+				for (int j = 0; j < q_m; j++) {
+					int nc = (j != q_m - 1 || r_m == 0) ? MC : r_m;
+
+					for (int l = 0; l < q_k; l++) {
+						int kc = (l != q_k - 1 || r_k == 0) ? MC : r_k;
+						int inc_a = j * stride_col_a * MC + l * MC * stride_row_a;
+						pack_A(nc, kc, A + inc_a, stride_row_a, stride_col_a, _A);
+						F _beta = (l == 0) ? beta : F(1.0);
+						for (int i = j; i < q_m; i++) {
+							int mc = (i != q_m - 1 || r_m == 0) ? MC : r_m;
+							int inc_b = i * stride_col_a * MC + l * MC * stride_row_a;
+							pack_B(kc, mc, A + inc_b, stride_col_a, stride_row_a, _B);			
+							int inc_c = j * MC * stride_col_c + i * MC * stride_row_c;
+							if (i != j) {
+								dgemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+							}
+							else {
+								syurk_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+							}
+						}
+
+					}
+				}
+				delete[] _A;
+				delete[] _B;
+				delete[] _C;
+			}
+
+			export template<class T, class F>
+			void syurk(int n, int k, F alpha, T A, int stride_row_a, int stride_col_a, F beta, T C, int stride_row_c, int stride_col_c) {
+				if (alpha == F(0.0) || k == 0) {
+					truscal(n, n, beta, C, stride_row_c, stride_col_c); //there are no matrix A, B to add to C with
+					return;
+				}
+
+				int q_m = (n + MC - 1) / MC; //number of vertical blocks of A
+				int q_k = (k + MC - 1) / MC;
+
+				int r_m = n % MC;
+				int r_k = k % MC;
+
+
+				if (n < -200 && k < -200) {
+					F* _A = new F[MC * MC]();
+					F* _B = new F[MC * MC]();
+					F* _C = new double[MC * MC]();
+
+					for (int j = 0; j < q_m; j++) {
+						int nc = (j != q_m - 1 || r_m == 0) ? MC : r_m;
+
+						for (int l = 0; l < q_k; l++) {
+							int kc = (l != q_k - 1 || r_k == 0) ? MC : r_k;
+							int inc_a = j * stride_col_a * MC + l * MC * stride_row_a;
+							pack_A(nc, kc, A + inc_a, stride_row_a, stride_col_a, _A);
+							F _beta = (l == 0) ? beta : F(1.0);
+							for (int i = j; i < q_m; i++) {
+								int mc = (i != q_m - 1 || r_m == 0) ? MC : r_m;
+								int inc_b = i * stride_col_a * MC + l * MC * stride_row_a;
+								pack_B(kc, mc, A + inc_b, stride_col_a, stride_row_a, _B);
+								int inc_c = j * MC * stride_col_c + i * MC * stride_row_c;
+								if (i != j) {
+
+									dgemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+								}
+								else {
+									syurk_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+
+								}
+							}
+
+						}
+					}
+
+					delete[] _A;
+					delete[] _B;
+					delete[] _C;
+				}
+				int n_threads = std::thread::hardware_concurrency();
+				int rem = 0;
+				T Cs = C;
+				T As = A;
+
+				//chunkM is in reality chunkN
+				if (true) {
+					int chunkM;
+					int chunkQM = q_m;
+
+
+
+					if (q_m > n_threads) {
+						chunkQM = q_m / n_threads; //number of vertical blockpieces in A per thread
+						rem = q_m % n_threads;
+						chunkM = chunkQM * MC;
+					}
+					else {
+						chunkQM = 1;
+						chunkM = MC;
+						n_threads = q_m;
+
+					}
+
+					std::vector<std::thread> ts(n_threads);
+					int leftover = (rem == 0) ? n - (n_threads - 1) * chunkQM * MC : n - (n_threads - 1 - rem) * chunkQM * MC - rem * (chunkQM + 1) * MC; //number of leftover columns
+					int panels_so_far = 0;
+
+					for (int i = 0; i < n_threads - 1; i++) {
+						if (rem == 0) {
+							ts[i] = std::thread(syurk_explicit<T, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM, 0, q_m, q_k, r_m, r_k, panels_so_far); //there are no matrix A, B to multiply C with
+							As += stride_col_a * chunkM;
+							Cs += stride_row_c * chunkM + stride_col_c * chunkM;
+							panels_so_far += chunkQM;
+						}
+						else {
+							ts[i] = std::thread(syurk_explicit<T, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM + 1, 0, q_m, q_k, r_m, r_k, panels_so_far); //there are no matrix A, B to multiply C with
+							As += stride_col_a * (chunkM + MC);
+							Cs += stride_row_c * (chunkM + MC) + stride_col_c * (chunkM + MC);
+							rem--;
+							panels_so_far += chunkQM + 1;
+						}
+
+					}
+					ts[n_threads - 1] = std::thread(syurk_explicit<T, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM, r_m, q_m, q_k, r_m, r_k, panels_so_far);
+
+					for (int i = 0; i < n_threads; i++) {
+						ts[i].join();
+
+					}
+
+				}
+				else {
+
+
+				}
+
+
+			}
+
+			/*Calculation of Sylrk*/
+
+			//Y=alpha*Y for lower triangular Y
+			template<class T, class F>
+			void trlscal(int m, int n, F alpha, T A, int stride_row_a, int stride_col_a) {
+				int k = std::min(m, n);
+				for (int i = 0; i < k; i++) {
+					for (int j = 0; j <= i; j++) {
+						A[i * stride_col_a + j * stride_row_a] *= alpha;
+					}
+				}
+
+			}
+
+			//Y=alpha*X for lower trianguar X
+			template<class T, class F>
+			void trlaxpy(int m, int n, F alpha, T X, int  stride_row_x, int stride_col_x, T Y, int  stride_row_y, int stride_col_y) {
+				for (int i = 0; i < n; i++) {
+					for (int j = i; j < m; j++) {
+						Y[j * stride_col_y + i * stride_row_y] += alpha * X[j * stride_col_x + i * stride_row_x];
+
+					}
+				}
+			}
+
+			//A is in column major form and B is in row major form (i.e. A was packed by the function pack_A and B by pack_B)
+			template<class T, class F>
+			void sylrk_micro_kernel(int mr, int nr, int kc, int ic, int jc, F alpha, const F* _A, const F* _B, F beta, T C, int stride_row_c, int stride_col_c) {
+
+				F AB[MR * NR];
+				dgemm_micro_kernel(kc, alpha, _A, _B, F(0.0), AB, 1, NR);
+
+				if (jc < ic) {
+					dgescal(mr, ic - jc, beta, C, stride_row_c, stride_col_c);
+					dgeaxpy(mr, ic - jc, F(1.0), AB, 1, NR, C, stride_row_c, stride_col_c);
+					trlscal(mr, nr - (ic - jc), beta,
+						C + (ic - jc) * stride_row_c, stride_row_c, stride_col_c);
+					trlaxpy(mr, nr - (ic - jc), F(1.0),
+						AB + (ic - jc), 1, NR,
+						C + (ic - jc) * stride_row_c, stride_row_c, stride_col_c);
+
+				}
+				else {
+					trlscal(mr - (jc - ic), nr, beta,
+						C + (jc - ic) * stride_col_c, stride_row_c, stride_col_c);
+					trlaxpy(mr - (jc - ic), nr, F(1.0),
+						AB + (jc - ic) * NR, 1, NR,
+						C + (jc - ic) * stride_col_c, stride_row_c, stride_col_c);
+				}
+
+			}
+
+			template<class T, class F>
+			void sylrk_macro_kernel(size_t mc, size_t nc, size_t kc, F alpha, F beta, F* _A, F* _B, T C, F* _C, size_t stride_row_c, size_t stride_col_c) {
+				size_t q_m = (mc + MR - 1) / MR; //we add MR-1 and then floor the result, so that e.g. a 3 x 3 matrix still has a panel if MR>3
+				size_t q_n = (nc + NR - 1) / NR;
+				//std::cout << "in macro kernel\n";
+				size_t r_m = mc % MR;
+				size_t r_n = nc % NR;
+				//If MR!=NR, we may have to adjust for the different sizes accordingly
+				int ki = (MR < NR) ? NR / MR : 1;  // 2
+				int kj = (MR > NR) ? MR / NR : 1;  // 1
+
+				for (size_t j = 0; j < q_n; j++) {
+					size_t nr = ((j != q_n - 1) || (r_n == 0)) ? NR : r_n;
+					for (size_t i = ki * (j / kj); i < q_m; i++) {
+						size_t mr = ((i != q_m - 1) || (r_m == 0)) ? MR : r_m;
+						/*
+						std::cout<<"zu multiplizierende Matrizen:\n";
+						std::cout<<"_A=\n";
+						printmat(_A+i*kc*MR,MR,kc);
+						std::cout<<"\n _B=\n";
+						printmat(_B+j*kc*NR,kc,NR);
+						std::cin.get();
+						*/
+						size_t inc_c = i * stride_col_c * MR + j * stride_row_c * NR;
+						if ((i / ki) == (j / kj)) {
+							sylrk_micro_kernel(mr, nr, kc, i * MR, j * NR, alpha, (_A + i * kc * MR), _B + j * kc * NR, beta, C + inc_c, stride_row_c, stride_col_c);
+						}
+						else {
+							if (mr == MR && nr == NR) {
+								dgemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, beta, C + inc_c, stride_row_c, stride_col_c);
+							}
+							else {
+								dgemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, F(0.0), _C, 1, NR);
+								dgescal(mr, nr, beta, C + inc_c, stride_row_c, stride_col_c);
+								dgeaxpy(mr, nr, F(1.0), _C, 1, NR, C + inc_c, stride_row_c, stride_col_c);
+							}
+						}
+
+					}
+
+				}
+			}
+			template<class T, class F>
+			void sylrk_explicit(F alpha, T A, int stride_row_a, int stride_col_a, F beta, T C, int stride_row_c, int stride_col_c, int m_max, int r_m_max, int q_m, int q_k, int r_m, int r_k, int offset_blocks) {
+				//	std::cout<<"explicit:"<<r_m_max<<"\n";
+				F* _A = new F[MC * MC]();
+				F* _B = new F[MC * MC]();
+				F* _C = new double[MC * MC]();
+				for (int j = 0; j < m_max; j++) {
+
+					int nc = (j != m_max - 1 || r_m_max == 0) ? MC : r_m_max;
+					for (int l = 0; l < q_k; l++) {
+						int kc = (l != q_k - 1 || r_k == 0) ? MC : r_k;
+						int inc_a = j * stride_col_a * MC + l * MC * stride_row_a + offset_blocks * MC * stride_col_a;
+						pack_A(nc, kc, A + inc_a, stride_row_a, stride_col_a, _A);
+
+						F _beta = (l == 0) ? beta : F(1.0);
+						for (int i = 0; i <= j + offset_blocks; i++) {
+							int mc = (i != (q_m)-1 || r_m == 0) ? MC : r_m;
+							int inc_b = i * stride_col_a * MC + l * MC * stride_row_a;
+							pack_B(kc, mc, A + inc_b, stride_col_a, stride_row_a, _B);
+
+							int inc_c = j * MC * stride_col_c + i * MC * stride_row_c;
+
+							if (i != (j + offset_blocks)) {
+								dgemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+							}
+							else {
+								sylrk_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+							}
+						}
+					}
+					//std::cout<<"C:\n";
+	//printmat(C,17,17);
+
+
+	//std::cin.get();
+				}
+				delete[] _A;
+				delete[] _B;
+				delete[] _C;
+
+			}
+			template<class T, class F>
+			void sylrk_single(int n, int k, F alpha, T A, int stride_row_a, int stride_col_a, F beta, T C, int stride_row_c, int stride_col_c) {
+
+				if (alpha == F(0.0) || k == 0) {
+					trlscal(n, n, beta, C, stride_row_c, stride_col_c); //there are no matrix A, B to add to C with
+					return;
+				}
+
+				int q_m = (n + MC - 1) / MC; //number of vertical blocks of A
+				int q_k = (k + MC - 1) / MC;
+
+				int r_m = n % MC;
+				int r_k = k % MC;
+
+				F* _A = new F[MC * MC]();
+				F* _B = new F[MC * MC]();
+				F* _C = new double[MC * MC]();
+				for (int j = 0; j < q_m; j++) {
+					int nc = (j != q_m - 1 || r_m == 0) ? MC : r_m;
+
+					for (int l = 0; l < q_k; l++) {
+						int kc = (l != q_k - 1 || r_k == 0) ? MC : r_k;
+						int inc_a = j * stride_col_a * MC + l * MC * stride_row_a;
+						pack_A(nc, kc, A + inc_a, stride_row_a, stride_col_a, _A);
+						F _beta = (l == 0) ? beta : F(1.0);
+						for (int i = 0; i <= j; i++) {
+							int mc = (i != q_m - 1 || r_m == 0) ? MC : r_m;
+							int inc_b = i * stride_col_a * MC + l * MC * stride_row_a;
+
+							pack_B(kc, mc, A + inc_b, stride_col_a, stride_row_a, _B);
+
+							int inc_c = j * MC * stride_col_c + i * MC * stride_row_c;
+							if (i != j) {
+
+								dgemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+
+							}
+							else {
+								sylrk_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+							}
+						}
+
+					}
+				}
+				delete[] _A;
+				delete[] _B;
+				delete[] _C;
+			}
+			
+			export template<class T, class F>
+			void sylrk(int n, int k, F alpha, T A, int stride_row_a, int stride_col_a, F beta, T C, int stride_row_c, int stride_col_c) {
+				if (alpha == F(0.0) || k == 0) {
+					trlscal(n, n, beta, C, stride_row_c, stride_col_c); //there are no matrix A, B to add to C with
+					return;
+				}
+
+				int q_m = (n + MC - 1) / MC; //number of vertical blocks of A
+				int q_k = (k + MC - 1) / MC;
+
+				int r_m = n % MC;
+				int r_k = k % MC;
+
+
+				if (n < -200 && k < -200) {
+					F* _A = new F[MC * MC]();
+					F* _B = new F[MC * MC]();
+					F* _C = new double[MC * MC]();
+
+					for (int j = 0; j < q_m; j++) {
+						int nc = (j != q_m - 1 || r_m == 0) ? MC : r_m;
+
+						for (int l = 0; l < q_k; l++) {
+							int kc = (l != q_k - 1 || r_k == 0) ? MC : r_k;
+							int inc_a = j * stride_col_a * MC + l * MC * stride_row_a;
+							pack_A(nc, kc, A + inc_a, stride_row_a, stride_col_a, _A);
+							F _beta = (l == 0) ? beta : F(1.0);
+							for (int i = 0; i <= j; i++) {
+								int mc = (i != q_m - 1 || r_m == 0) ? MC : r_m;
+								int inc_b = i * stride_col_a * MC + l * MC * stride_row_a;
+
+								pack_B(kc, mc, A + inc_b, stride_col_a, stride_row_a, _B);
+
+								int inc_c = j * MC * stride_col_c + i * MC * stride_row_c;
+								if (i != j) {
+
+									dgemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+
+								}
+								else {
+									sylrk_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+								}
+							}
+
+						}
+					}
+
+					delete[] _A;
+					delete[] _B;
+					delete[] _C;
+				}
+				int n_threads = std::thread::hardware_concurrency();
+				int rem = 0;
+				T Cs = C;
+				T As = A;
+
+				//chunkM is in reality chunkN
+				if (true) {
+					int chunkM;
+					int chunkQM = q_m;
+					//n_threads=2;	
+
+
+					if (q_m > n_threads) {
+						chunkQM = q_m / n_threads; //number of vertical blockpieces in A per thread
+						rem = q_m % n_threads;
+						chunkM = chunkQM * MC;
+					}
+					else {
+						chunkQM = 1;
+						chunkM = MC;
+						n_threads = q_m;
+
+					}
+
+					std::vector<std::thread> ts(n_threads);
+					int leftover = (rem == 0) ? n - (n_threads - 1) * chunkQM * MC : n - (n_threads - 1 - rem) * chunkQM * MC - rem * (chunkQM + 1) * MC; //number of leftover columns
+					//int panels_so_far=(rem==0)?(n_threads-1)*chunkQM:(n_threads-1-rem)*chunkQM+rem*(chunkQM+1); //number of leftover columns
+					int panels_so_far = 0;
+
+					for (int i = 0; i < n_threads - 1; i++) {
+						if (rem == 0) {
+							//F alpha, T A, int stride_row_a, int stride_col_a,F beta, T C, int stride_row_c, int stride_col_c, int m_max,int q_m, int q_k, int r_m, int r_k
+							ts[i] = std::thread(sylrk_explicit<T, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM, 0, q_m, q_k, r_m, r_k, panels_so_far); //there are no matrix A, B to multiply C with
+								//As+=stride_col_a*chunkM;
+							Cs += stride_col_c * chunkM;
+							panels_so_far += chunkQM;
+						}
+						else {
+							//	std::cout<<"hier\n";
+							ts[i] = std::thread(sylrk_explicit<T, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM + 1, 0, q_m, q_k, r_m, r_k, panels_so_far); //there are no matrix A, B to multiply C with
+							//As+=stride_col_a*(chunkM+MC);
+							Cs += stride_col_c * (chunkM + MC);
+							rem--;
+							panels_so_far += chunkQM + 1;
+						}
+
+					}
+					ts[n_threads - 1] = std::thread(sylrk_explicit<T, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM, r_m, q_m, q_k, r_m, r_k, panels_so_far);
+
+
+					for (int i = 0; i < n_threads; i++) {
+						ts[i].join();
+					}
+
+				}
+				else {
+
+
+				}
+
+
+			}
 			
 			
 			/*Solves A=LDL^T with diagonal D and lower triangular L. Result is stored back into A (in place)
@@ -962,6 +1559,115 @@ namespace opt{
 					}
 				}
 				delete[] D;
+			}
+
+
+			//inverse of lowertriangular matrix
+			template<class T, class F>
+			void lower_inv(T A, T res, int n) {
+				for (int i = 0; i < n; i++) {
+					for (int j = 0; j <= i; j++) {
+						if (j = i) {
+							res[i * n + i] = 1 / A[i * n + i];
+						}
+						else {
+							F sum = 0.0;
+							for (int k = j; k <= i - 1; k++) {
+								sum -= A[i * n + k] + res[k * n + j];
+							}
+							sum /= A[i * n + i];
+							res[i * n + j] = sum;
+						}
+					}
+				}
+			}
+
+			//inverse of D*L,whereas D is diagonal and L lower triangular
+			template<class T, class F>
+			void diag_lower_inv(int n, T A, int stride_row_a, int stride_col_a, T C, int stride_row_c, int stride_col_c) {
+				for (int i = 0; i < n; i++) {
+					for (int j = 0; j <= i; j++) {
+						if (j = i) {
+							C[i * stride_col_c + i * stride_row_c] = F(1.0) / A[i * stride_col_a + i * stride_row_a];
+						}
+						else {
+							F sum = 0.0;
+							for (int k = j; k <= i - 1; k++) {
+								sum -= A[i * stride_col_a + i * stride_row_a] * A[i * stride_col_a + k * stride_row_a] + C[k * stride_col_c + j * stride_row_c];
+							}
+							sum /= A[i * stride_col_a + i * stride_row_a];
+							C[i * stride_col_c + j * stride_row_c] = sum;
+						}
+					}
+				}
+			}
+
+			template<class T, class F>
+			void choi_blocked(int n, T A, int stride_row_a, int stride_col_a) {
+
+				int d = 256;
+				int q = n / d;
+				int rem = n % d;
+
+				auto A11 = A;
+				auto A21 = A + d * n;
+				auto A22 = A + d * n + d;
+
+				F temp1[d * d];
+				F temp2[(n - d) * d];
+
+				for (int i = 0; i < q; i++) {
+					//choi_ip<T, F>(d, A11, 1, n);
+					A11 += d * n;
+					//dl_inv(d, A11, 1, n, temp1, 1, d);
+					//co::mul::dcopy(n - d, d, A21, stride_row_a, stride_col_a, temp2, 1, d);
+
+					//co::mul::dgemm_nn(n - d, d, d, F(1.0), temp2, 1, n, temp1, 1, d, 0.0, A21, 1, n);
+
+
+				}
+
+				if (rem) {
+					d = rem;
+
+					//repeat calculation
+
+				}
+
+			}
+
+			//Calculates L*D*y=b for=LDL^T
+			template<class T, class F>
+			void choi_forward_sub(int n, T A, int stride_row_a, int stride_col_a, T b, int  stride_b, F* y) {
+
+				for (int i = 0; i < n; i++) {
+					F sum = b[i];
+					for (int j = 0; j < i; j++) {
+						sum -= A[i * stride_col_a + j * stride_row_a] * A[j * stride_col_a + j * stride_row_a] * y[j];
+					}
+					sum /= A[i * stride_col_a + i * stride_row_a];
+					y[i] = sum;
+				}
+			}
+
+			template<class T, class F>
+			void choi_backward_sub(int n, T A, int stride_row_a, int stride_col_a, F* y, T x, int stride_x) {
+				for (int i = n - 1; i >= 0; i--) {
+					x[i * stride_x] += y[i];
+					for (int j = i - 1; j >= 0; j--) {
+						x[j * stride_x] -= A[i * stride_col_a + j * stride_row_a] * x[i * stride_x];
+					}
+				}
+			}
+
+			export template<class T, class F>
+			void choi_solve(int n, T A, int stride_row_a, int stride_col_a, T b, int stride_b, T x, int stride_x) {
+				for (int i = 0; i < n; i++) {
+					x[i * stride_x] = F(0.0);
+				}
+				F y[n];
+				choi_forward_sub(n, A, stride_row_a, stride_col_a, b, stride_b, y);
+				choi_backward_sub(n, A, stride_row_a, stride_col_a, y, x, stride_x);
 			}
 		
 		}
