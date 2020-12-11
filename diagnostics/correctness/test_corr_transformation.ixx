@@ -2,6 +2,7 @@ module;
 #include <vector>
 #include <random>
 #include <ostream>
+#include <iostream> //remove
 #include<cmath>
 #include <filesystem>
 #include<fstream> //checken warum das importiert werden muss
@@ -25,6 +26,7 @@ namespace opt{
 					F val=A[i]-B[i];
 					val=(val<0)?-val:val;
 					if (val>tol){
+					std::cout<<"Error at:"<<i<<"\n";
 						return false;
 					}
 				}
@@ -99,7 +101,7 @@ namespace opt{
 				opt::test::parse_csv("correctness/test_data/matrix_mul/A1.txt",A1, m*k,"	");
 				opt::test::parse_csv("correctness/test_data/matrix_mul/B1.txt",B1, k*n,"	");	
 				
-				opt::math::cpu::dgemm_nn(m,n,k,alpha,A1,1,k,B1,1,n,beta,res,1,n);
+				opt::math::cpu::gemm(m,n,k,alpha,A1,1,k,B1,1,n,beta,res,1,n);
 	
 				double* np_res=new double[m*n];
 				opt::test::parse_csv("correctness/test_data/matrix_mul/C1.txt",np_res, m*n,"	");
@@ -130,7 +132,7 @@ namespace opt{
 				opt::test::parse_csv("correctness/test_data/matrix_mul/A2.txt",A1, m*k,"	");
 				opt::test::parse_csv("correctness/test_data/matrix_mul/B2.txt",B1, k*n,"	");	
 				
-				opt::math::cpu::dgemm_nn(m,n,k,alpha,A1,1,k,B1,1,n,beta,res,1,n);
+				opt::math::cpu::gemm(m,n,k,alpha,A1,1,k,B1,1,n,beta,res,1,n);
 	
 				double* np_res=new double[m*n];
 				opt::test::parse_csv("correctness/test_data/matrix_mul/C2.txt",np_res, m*n,"	");
@@ -161,7 +163,7 @@ namespace opt{
 				opt::test::parse_csv("correctness/test_data/matrix_mul/A4.txt",A1, m*k,"	");
 				opt::test::parse_csv("correctness/test_data/matrix_mul/B4.txt",B1, k*n,"	");	
 				
-				opt::math::cpu::dgemm_nn(m,n,k,alpha,A1,1,k,B1,1,n,beta,res,1,n);
+				opt::math::cpu::gemm(m,n,k,alpha,A1,1,k,B1,1,n,beta,res,1,n);
 	
 				double* np_res=new double[m*n];
 				opt::test::parse_csv("correctness/test_data/matrix_mul/C4.txt",np_res, m*n,"	");
@@ -196,7 +198,7 @@ namespace opt{
 
 					opt::test::fill_container_randomly<double*,double>(rd, A,n*k);
 					opt::math::cpu::syurk(n, k,alpha, A, 1, k,beta,res,1,n);	
-					opt::math::cpu::dgemm_nn(n,n,k,alpha,A,1,k,A,k,1,beta,control,1,n); //calculate control result, AA^T=C
+					opt::math::cpu::gemm(n,n,k,alpha,A,1,k,A,k,1,beta,control,1,n); //calculate control result, AA^T=C
 					is_correct=verify_upperlower(control, res,n, 'U', 0.0001);
 					delete[] A;
 					delete[] control;
@@ -232,7 +234,7 @@ namespace opt{
 
 					opt::test::fill_container_randomly<double*, double>(rd, A, n * k);
 					opt::math::cpu::sylrk(n, k, alpha, A, 1, k, beta, res, 1, n);
-					opt::math::cpu::dgemm_nn(n, n, k, alpha, A, 1, k, A, k, 1, beta, control, 1, n); //calculate control result, AA^T=C
+					opt::math::cpu::gemm(n, n, k, alpha, A, 1, k, A, k, 1, beta, control, 1, n); //calculate control result, AA^T=C
 					is_correct = verify_upperlower(control, res, n, 'L', 0.0001);
 					delete[] A;
 					delete[] control;
@@ -276,8 +278,8 @@ namespace opt{
 				B[2*n+1]=20.0/9.0;
 				B[2*n+2]=40.0/9.0;
 				
-				opt::math::cpu::choi<double*,double>(n,A,1,n);
-				opt::math::cpu::choip<double*,double>(n,A_packed,1,0);
+				opt::math::cpu::choi_single<double*,double>(n,A,1,n);
+				opt::math::cpu::choip_single<double*,double>(n,A_packed,1,0);
 				bool is_correct=verify_nonpacked_vs_packed(B,A_packed,n,0.000001);
 				bool are_same=verify_nonpacked_vs_packed(A,A_packed,n,0.0);
 				
@@ -292,6 +294,79 @@ namespace opt{
 					return true;
 				}	
 				return false;
+			}
+			
+			//Tests is choi and choip are equal and calculate the correct result
+			export bool cholesky_2(std::ostream& os, CorrectnessTest& v){
+	
+				std::random_device rd;
+				std::uniform_real_distribution<> dist(300, 300); // distribution in range [1, 6];		
+				bool is_correct;
+				for (int i = 0; i < 20; i++) {
+					int n = dist(rd);
+					int k = dist(rd);;
+				
+					double* A = new double[n * k]();
+					double* L = new double[n*n]();
+					double* D = new double[n*n]();
+					double* C = new double[n * n]();
+
+					double* temp = new double[n * n]();
+					opt::test::fill_container_randomly<double*, double>(rd, A, n * k);
+					//Create symmetric matrix C
+		//			std::cout<<"hier0\n";
+					opt::math::cpu::gemm(n, n, k, 1.0, A, 1, k, A, k, 1,0.0, C, 1, n);
+					
+//std::cout<<"hier1\n";					
+//printmat("A", A, n,k, std::cout);
+
+					delete[] A;
+					
+					double* C_copy=new double[n*n]();
+					for (int i = 0; i < n * n; i++) {
+						C_copy[i] = C[i];
+					}
+				
+				//	std::cout<<"Aat[60200]"<<C[60200]<<"\n";
+					
+//					printmat("AAt", C_copy, n,n, std::cout);
+					
+					opt::math::cpu::choi<double*, double>(n, C, 1, n);
+				std::cout<<"C[60200]"<<C[60200]<<"\n";
+				std::cin.get();
+//	std::cout<<"hier2\n";
+//					printmat("LD compact", C, n,n, std::cout);	
+					for (int i=0; i<n;i++){
+						for (int j=0;j<i;j++){
+							L[i*n+j]=C[i*n+j];
+						}
+						L[i*n+i]=1;
+					}
+//					printmat("L", L, n,n, std::cout);
+					for (int i=0;i<n;i++){
+						D[i*n+i]=C[i*n+i];
+					}
+					
+//					printmat("D", D, n,n, std::cout);
+//					std::cout<<"hier3\n";
+					opt::math::cpu::gemm(n, n, n, 1.0, D, 1, n, L, n, 1,0.0, temp, 1, n); //calculate intermediate result D*L^T from LDL^T
+					opt::math::cpu::gemm(n, n, n, 1.0, L, 1, n, temp, 1, n,0.0, C, 1, n);
+//					printmat("C", C, n,n, std::cout);
+//							std::cout<<"\n\n";	
+					bool is_correct=verify_calculation(C_copy, C, n*n, 0.01);
+					delete[] C;
+					delete[] C_copy;
+					delete[] temp;
+					delete[] L;
+					if (is_correct==false){
+						return v.test_successful=false;
+						return false;
+					}
+					
+				 }
+	
+				v.test_successful=true;	
+				return true;
 			}
 			export bool cholesky_solve(std::ostream& os, CorrectnessTest& v) {
 
@@ -315,6 +390,7 @@ namespace opt{
 					for (int i = 0; i < n * n; i++) {
 						C_copy[i] = C[i];
 					}
+					
 					opt::math::cpu::choi<double*, double>(n, C, 1, n);
 
 					double* b = new double[n];

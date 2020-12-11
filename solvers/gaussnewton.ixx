@@ -95,12 +95,12 @@ namespace opt{
 			
 				T result(1);
 				r(params,residuals);	
-				opt::math::cpu::dgemm_nn(1,1,rdim,gfloat(1.0),residuals,1,rdim,residuals,1,1,gfloat(0.0),result.begin(),1,1);
+				opt::math::cpu::gemm(1,1,rdim,gfloat(1.0),residuals,1,rdim,residuals,1,1,gfloat(0.0),result.begin(),1,1);
 				
 				return *(result.begin());
 			}
 			
-			void dgemm_and_residual(size_t xdim ,gfloat beta,typename T::iterator A, typename T::iterator x_source, typename T::iterator x_dest, typename T::iterator res, gfloat& f0_res){
+			void gemm_and_residual(size_t xdim ,gfloat beta,typename T::iterator A, typename T::iterator x_source, typename T::iterator x_dest, typename T::iterator res, gfloat& f0_res){
 					T residual(rdim);
 				std::copy(x_source,x_source+xdim,x_dest);
 					
@@ -134,7 +134,7 @@ namespace opt{
 					*/
 					
 					
-					opt::math::cpu::dgemm_nn(xdim,1,rdim,-beta,A,1,rdim,res,1,1,gfloat(1.0),x_dest,1,1);	
+					opt::math::cpu::gemm(xdim,1,rdim,-beta,A,1,rdim,res,1,1,gfloat(1.0),x_dest,1,1);	
 					f0_res=f0(x_dest,residual.begin());		
 					
 				
@@ -174,7 +174,7 @@ namespace opt{
 				}*/			
 				
 				T fk(1,fmin);
-				opt::math::cpu::dgemm_nn(1,1,xdim,c1,direction.begin(),1,xdim,grad,1,1,gfloat(1.0),fk.begin(),1,1);	
+				opt::math::cpu::gemm(1,1,xdim,c1,direction.begin(),1,xdim,grad,1,1,gfloat(1.0),fk.begin(),1,1);	
 				//std::cout<<"f new: "<<fnew <<" f(xk)"<<*(fk.begin())<<"\n";
 				if (fnew<=*(fk.begin())){
 					return true;
@@ -224,7 +224,7 @@ namespace opt{
 						j_t(xi.begin(),J_t.begin());
 						j_t_j_inv(xi.begin(),J_t_J_inv.begin());
 					
-						opt::math::cpu::dgemm_nn(xdim,rdim,xdim,gfloat(1.0),J_t_J_inv.begin(),1,xdim,J_t.begin(),1,rdim,gfloat(0.0),C.begin(),1,rdim);
+						opt::math::cpu::gemm(xdim,rdim,xdim,gfloat(1.0),J_t_J_inv.begin(),1,xdim,J_t.begin(),1,rdim,gfloat(0.0),C.begin(),1,rdim);
 						
 						/*Calculate gradient from indices of jacobi matrix. Used for backtracking stepsize finding later*/
 						for (int i=0;i<xdim;i++){
@@ -250,10 +250,10 @@ namespace opt{
 							
 							for (int i=0;i<n_threads;i++){
 						//	std::cout<<"beta:"<<beta<<"lambda:"<<lambda<<"\t \t";
-							//	t[i]=std::thread(opt::math::cpu::dgemm_nn(d,1,xdim,beta,C.begin(),1,xdim,residuals.begin(),1,xdim,gfloat(1.0),(xi.begin()),1,d);
+							//	t[i]=std::thread(opt::math::cpu::gemm(d,1,xdim,beta,C.begin(),1,xdim,residuals.begin(),1,xdim,gfloat(1.0),(xi.begin()),1,d);
 							
 			
-								ts[i]=std::thread(&GNSCPU::dgemm_and_residual,this,xdim,beta,C.begin(),xi.begin(),xs.begin()+i*xdim,residuals.begin(),std::ref(f0_vals[i]));
+								ts[i]=std::thread(&GNSCPU::gemm_and_residual,this,xdim,beta,C.begin(),xi.begin(),xs.begin()+i*xdim,residuals.begin(),std::ref(f0_vals[i]));
 								betas[i]=beta;
 								beta*=lambda;
 								

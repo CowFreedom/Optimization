@@ -80,7 +80,8 @@ namespace opt{
 		}
 		
 		export template<class T>
-		void printmat(T v, int N, int M, std::ostream& os) {
+		void printmat(std::string name, T v, int N, int M, std::ostream& os) {
+			std::cout<<name<<"\n";
 			for (int i = 0; i < N; i++) {
 				for (int j = 0; j < M; j++) {
 					os << *(v + j + i * M) << "\t";

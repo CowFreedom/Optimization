@@ -141,7 +141,7 @@ namespace opt{
 			//A is in column major form and B is in row major form (i.e. A was packed by the function pack_A and B by pack_B)
 
 			template<class T>
-			void dgemm_micro_kernel(size_t kc, double alpha, const double* A, const double* B, double beta, T C, size_t stride_row_c, int stride_col_c) {
+			void gemm_micro_kernel(size_t kc, double alpha, const double* A, const double* B, double beta, T C, size_t stride_row_c, int stride_col_c) {
 				//std::cout<<A[0]<<"\t"<<A[1]<<"\n"<<A[MR]<<"\t"<<A[MR+1]<<"\n";
 
 				//double* AB =(double*)_aligned_malloc(NR*MR*sizeof(double), 64);
@@ -249,7 +249,7 @@ namespace opt{
 				
 				//
 				//  Update C <- C + alpha*AB (note: the case alpha==0.0 was already treated in
-				//                                  the above layer dgemm_nn)
+				//                                  the above layer gemm)
 				//
 				if (alpha == double(1.0)) {
 					for (size_t i = 0; i < MR; ++i) {
@@ -271,7 +271,7 @@ namespace opt{
 
 			//A is in column major form and B is in row major form (i.e. A was packed by the function pack_A and B by pack_B)
 			template<class T, class F>
-			void dgemm_micro_kernel(size_t kc, F alpha, const F* A, const F* B, F beta, T C, size_t stride_row_c, int stride_col_c) {
+			void gemm_micro_kernel(size_t kc, F alpha, const F* A, const F* B, F beta, T C, size_t stride_row_c, int stride_col_c) {
 				/*std::cout<<"zu multiplizierende Matrizen:\n";
 									std::cout<<"_A=\n";
 									printmat(A,MR,KC);
@@ -319,7 +319,7 @@ namespace opt{
 
 				//
 				//  Update C <- C + alpha*AB (note: the case alpha==0.0 was already treated in
-				//                                  the above layer dgemm_nn)
+				//                                  the above layer gemm)
 				//
 				if (alpha == F(1.0)) {
 					for (size_t i = 0; i < MR; ++i) {
@@ -395,7 +395,7 @@ namespace opt{
 				}
 			}
 			template<class T, class F>
-			void dgemm_macro_kernel(size_t mc, size_t nc, size_t kc, F alpha, F beta, F* _A, F* _B, T C, F* _C, size_t stride_row_c, size_t stride_col_c) {
+			void gemm_macro_kernel(size_t mc, size_t nc, size_t kc, F alpha, F beta, F* _A, F* _B, T C, F* _C, size_t stride_row_c, size_t stride_col_c) {
 				size_t q_m = (mc + MR - 1) / MR; //we add MR-1 and then floor the result, so that e.g. a 3 x 3 matrix still has a panel if MR>3
 				size_t q_n = (nc + NR - 1) / NR;
 				//std::cout << "in macro kernel\n";
@@ -418,11 +418,11 @@ namespace opt{
 						if (mr == MR && nr == NR) {
 							//std::cout << "Makro Kernel: mr==MR und nr==NR\n";
 							size_t inc_c = i * stride_col_c * MR + j * stride_row_c * NR;
-							dgemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, beta, C + inc_c, stride_row_c, stride_col_c);
+							gemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, beta, C + inc_c, stride_row_c, stride_col_c);
 						}
 						else {
 							size_t inc_c = i * stride_col_c * MR + j * stride_row_c * NR;
-							dgemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, F(0.0), _C, 1, NR);
+							gemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, F(0.0), _C, 1, NR);
 							dgescal(mr, nr, beta, C + inc_c, stride_row_c, stride_col_c);
 							dgeaxpy(mr,nr,F(1.0),_C,1,NR,C+inc_c,stride_row_c,stride_col_c);
 						}
@@ -433,7 +433,7 @@ namespace opt{
 			}
 
 			template<class T, class F>
-			void dgemm_nn_single(size_t m, size_t n, size_t k, F alpha, T A, size_t stride_row_a, size_t stride_col_a,
+			void gemm_single(size_t m, size_t n, size_t k, F alpha, T A, size_t stride_row_a, size_t stride_col_a,
 				T B, size_t stride_row_b, size_t stride_col_b, F beta, T C, size_t stride_row_c, size_t stride_col_c) {
 				
 				size_t q_m = (m + MC - 1) / MC; //number of horizontal blocks
@@ -478,7 +478,7 @@ namespace opt{
 							size_t inc_a = i * stride_col_a * MC + l * KC * stride_row_a;
 							pack_A(mc, kc, A + inc_a, stride_row_a, stride_col_a, _A);
 							size_t inc_c = i * MC * stride_col_c + j * NC * stride_row_c;
-							dgemm_macro_kernel(mc, nc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+							gemm_macro_kernel(mc, nc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
 						}
 							
 					}
@@ -492,7 +492,7 @@ namespace opt{
 			
 			//Matrix multiplication with explicitly given buffers and problem dependent blocksizes. 
 			template<class T, class F>
-			void dgemm_nn_explicit(size_t m, size_t n, size_t k, F alpha, T A, size_t stride_row_a, size_t stride_col_a,
+			void gemm_explicit(size_t m, size_t n, size_t k, F alpha, T A, size_t stride_row_a, size_t stride_col_a,
 				T B, size_t stride_row_b, size_t stride_col_b, F beta, T C, size_t stride_row_c, size_t stride_col_c,size_t q_m, size_t q_n, size_t q_k, size_t r_m, size_t r_n, size_t r_k) {
 
 				double* _A=new double[KC * MC];
@@ -510,7 +510,7 @@ namespace opt{
 							size_t inc_a = i * stride_col_a * MC + l * KC * stride_row_a;
 							pack_A(mc, kc, A + inc_a, stride_row_a, stride_col_a, _A);
 							size_t inc_c = i * MC * stride_col_c + j * NC * stride_row_c;
-							dgemm_macro_kernel(mc, nc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+							gemm_macro_kernel(mc, nc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
 						}
 							
 					}
@@ -521,7 +521,7 @@ namespace opt{
 			}
 
 			export template<class T, class F>
-			void dgemm_nn(size_t m, size_t n, size_t k, F alpha, T A, size_t stride_row_a, size_t stride_col_a,
+			void gemm(size_t m, size_t n, size_t k, F alpha, T A, size_t stride_row_a, size_t stride_col_a,
 				T B, size_t stride_row_b, size_t stride_col_b, F beta, T C, size_t stride_row_c, size_t stride_col_c) {
 				size_t q_m = (m + MC - 1) / MC; //number of vertical blocks of A
 				size_t q_n = (n + NC - 1) / NC;
@@ -563,7 +563,7 @@ namespace opt{
 								size_t inc_a = i * stride_col_a * MC + l * KC * stride_row_a;
 								pack_A(mc, kc, A + inc_a, stride_row_a, stride_col_a, _A);
 								size_t inc_c = i * MC * stride_col_c + j * NC * stride_row_c;
-								dgemm_macro_kernel(mc, nc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+								gemm_macro_kernel(mc, nc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
 								//std::cout << "\n C=\n";
 								//printmat(C, m, n);
 							}
@@ -667,20 +667,20 @@ namespace opt{
 						for (int i=0;i<(n_threads-1);i++){
 							if (rem==0){
 
-								ts[i]=std::thread(dgemm_nn_explicit<T,F>,chunkM,n,k, alpha, As,stride_row_a,stride_col_a,B,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,chunkQM,q_n,q_k,0,r_n, r_k); //there are no matrix A, B to multiply C with
-								As+=chunkQM*MC*k;
-								Cs+=chunkQM*MC*n;
+								ts[i]=std::thread(gemm_explicit<T,F>,chunkM,n,k, alpha, As,stride_row_a,stride_col_a,B,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,chunkQM,q_n,q_k,0,r_n, r_k); //there are no matrix A, B to multiply C with
+								As+=chunkQM*MC*stride_col_a;
+								Cs+=chunkQM*MC*stride_col_c;
 							}
 							else{
-								ts[i]=std::thread(dgemm_nn_explicit<T,F>,chunkM+MC,n,k, alpha, As,stride_row_a,stride_col_a,B,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,chunkQM+1,q_n,q_k,0,r_n, r_k); //there are no matrix A, B to multiply C with
-								As+=(chunkQM+1)*MC*k;
-								Cs+=(chunkQM+1)*MC*n;					
+								ts[i]=std::thread(gemm_explicit<T,F>,chunkM+MC,n,k, alpha, As,stride_row_a,stride_col_a,B,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,chunkQM+1,q_n,q_k,0,r_n, r_k); //there are no matrix A, B to multiply C with
+								As+=(chunkQM+1)*MC*stride_col_a;
+								Cs+=(chunkQM+1)*MC*stride_col_c;					
 								rem--;
 								
 							}
 						}
 			
-						ts[n_threads-1]=std::thread(dgemm_nn_explicit<T,F>,leftover,n,k, alpha, As,stride_row_a,stride_col_a,B,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,chunkQM,q_n,q_k,leftover%MC,r_n, r_k);
+						ts[n_threads-1]=std::thread(gemm_explicit<T,F>,leftover,n,k, alpha, As,stride_row_a,stride_col_a,B,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,chunkQM,q_n,q_k,leftover%MC,r_n, r_k);
 						
 						for (int i=0;i<n_threads;i++){
 							ts[i].join();
@@ -705,18 +705,18 @@ namespace opt{
 						
 						for (int i=0;i<(n_threads-1);i++){
 							if (rem==0){
-								ts[i]=std::thread(dgemm_nn_explicit<T,F>,m,chunkN,k, alpha, A,stride_row_a,stride_col_a,Bs,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,q_m,chunkQN,q_k,r_m,0, r_k); //there are no matrix A, B to multiply C with
-								Bs+=chunkQN*NC;
-								Cs+=chunkQN*NC;
+								ts[i]=std::thread(gemm_explicit<T,F>,m,chunkN,k, alpha, A,stride_row_a,stride_col_a,Bs,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,q_m,chunkQN,q_k,r_m,0, r_k); //there are no matrix A, B to multiply C with
+								Bs+=chunkQN*NC*stride_row_b;
+								Cs+=chunkQN*NC*stride_row_c;
 							}
 							else{
-								ts[i]=std::thread(dgemm_nn_explicit<T,F>,m,chunkN+NC,k, alpha, A,stride_row_a,stride_col_a,Bs,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,q_m,chunkQN+1,q_k,r_m,0, r_k); //there are no matrix A, B to multiply C with
-								Bs+=(chunkQN+1)*NC;
-								Cs+=(chunkQN+1)*NC;					
+								ts[i]=std::thread(gemm_explicit<T,F>,m,chunkN+NC,k, alpha, A,stride_row_a,stride_col_a,Bs,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,q_m,chunkQN+1,q_k,r_m,0, r_k); //there are no matrix A, B to multiply C with
+								Bs+=(chunkQN+1)*NC*stride_row_b;
+								Cs+=(chunkQN+1)*NC*stride_row_c;					
 								rem--;
 							}
 						}
-						ts[n_threads-1]=std::thread(dgemm_nn_explicit<T,F>,m,leftover,k, alpha, A,stride_row_a,stride_col_a,Bs,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,q_m,chunkQN,q_k,r_m,leftover%NC, r_k);
+						ts[n_threads-1]=std::thread(gemm_explicit<T,F>,m,leftover,k, alpha, A,stride_row_a,stride_col_a,Bs,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,q_m,chunkQN,q_k,r_m,leftover%NC, r_k);
 						
 						for (int i=0;i<n_threads;i++){
 							ts[i].join();
@@ -896,7 +896,7 @@ namespace opt{
 			void syurk_micro_kernel(int mr, int nr, int kc, int ic, int jc, F alpha, const F* _A, const F* _B, F beta, T C, int stride_row_c, int stride_col_c) {
 
 				F AB[MR * NR];
-				dgemm_micro_kernel(kc, alpha, _A, _B, F(0.0), AB, 1, NR);
+				gemm_micro_kernel(kc, alpha, _A, _B, F(0.0), AB, 1, NR);
 				//	std::cout<<"AB draußen:\n";
 				//	printmat(AB,MR,NR);
 					//NR>MR
@@ -979,10 +979,10 @@ namespace opt{
 						}
 						else {
 							if (mr == MR && nr == NR) {
-								dgemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, beta, C + inc_c, stride_row_c, stride_col_c);
+								gemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, beta, C + inc_c, stride_row_c, stride_col_c);
 							}
 							else {
-								dgemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, F(0.0), _C, 1, NR);
+								gemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, F(0.0), _C, 1, NR);
 								dgescal(mr, nr, beta, C + inc_c, stride_row_c, stride_col_c);
 								dgeaxpy(mr, nr, F(1.0), _C, 1, NR, C + inc_c, stride_row_c, stride_col_c);
 							}
@@ -1032,7 +1032,7 @@ namespace opt{
 							int inc_c = j * MC * stride_col_c + i * MC * stride_row_c;
 
 							if (i != j) {
-								dgemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+								gemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
 								//std::cout<<"damit fertig\n";
 							}
 							else {
@@ -1083,7 +1083,7 @@ namespace opt{
 							pack_B(kc, mc, A + inc_b, stride_col_a, stride_row_a, _B);			
 							int inc_c = j * MC * stride_col_c + i * MC * stride_row_c;
 							if (i != j) {
-								dgemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+								gemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
 							}
 							else {
 								syurk_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
@@ -1111,7 +1111,7 @@ namespace opt{
 				int r_k = k % MC;
 
 
-				if (n < -200 && k < -200) {
+				if (n < 200 && k < 200) {
 					F* _A = new F[MC * MC]();
 					F* _B = new F[MC * MC]();
 					F* _C = new double[MC * MC]();
@@ -1131,7 +1131,7 @@ namespace opt{
 								int inc_c = j * MC * stride_col_c + i * MC * stride_row_c;
 								if (i != j) {
 
-									dgemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+									gemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
 								}
 								else {
 									syurk_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
@@ -1236,7 +1236,7 @@ namespace opt{
 			void sylrk_micro_kernel(int mr, int nr, int kc, int ic, int jc, F alpha, const F* _A, const F* _B, F beta, T C, int stride_row_c, int stride_col_c) {
 
 				F AB[MR * NR];
-				dgemm_micro_kernel(kc, alpha, _A, _B, F(0.0), AB, 1, NR);
+				gemm_micro_kernel(kc, alpha, _A, _B, F(0.0), AB, 1, NR);
 
 				if (jc < ic) {
 					dgescal(mr, ic - jc, beta, C, stride_row_c, stride_col_c);
@@ -1287,10 +1287,10 @@ namespace opt{
 						}
 						else {
 							if (mr == MR && nr == NR) {
-								dgemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, beta, C + inc_c, stride_row_c, stride_col_c);
+								gemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, beta, C + inc_c, stride_row_c, stride_col_c);
 							}
 							else {
-								dgemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, F(0.0), _C, 1, NR);
+								gemm_micro_kernel(kc, alpha, (_A + i * kc * MR), _B + j * kc * NR, F(0.0), _C, 1, NR);
 								dgescal(mr, nr, beta, C + inc_c, stride_row_c, stride_col_c);
 								dgeaxpy(mr, nr, F(1.0), _C, 1, NR, C + inc_c, stride_row_c, stride_col_c);
 							}
@@ -1323,7 +1323,7 @@ namespace opt{
 							int inc_c = j * MC * stride_col_c + i * MC * stride_row_c;
 
 							if (i != (j + offset_blocks)) {
-								dgemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+								gemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
 							}
 							else {
 								sylrk_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
@@ -1375,7 +1375,7 @@ namespace opt{
 							int inc_c = j * MC * stride_col_c + i * MC * stride_row_c;
 							if (i != j) {
 
-								dgemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+								gemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
 
 							}
 							else {
@@ -1404,7 +1404,7 @@ namespace opt{
 				int r_k = k % MC;
 
 
-				if (n < -200 && k < -200) {
+				if (n < 200 && k < 200) {
 					F* _A = new F[MC * MC]();
 					F* _B = new F[MC * MC]();
 					F* _C = new double[MC * MC]();
@@ -1426,7 +1426,7 @@ namespace opt{
 								int inc_c = j * MC * stride_col_c + i * MC * stride_row_c;
 								if (i != j) {
 
-									dgemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
+									gemm_macro_kernel(nc, mc, kc, alpha, _beta, _A, _B, C + inc_c, _C, stride_row_c, stride_col_c);
 
 								}
 								else {
@@ -1450,8 +1450,6 @@ namespace opt{
 				if (true) {
 					int chunkM;
 					int chunkQM = q_m;
-					//n_threads=2;	
-
 
 					if (q_m > n_threads) {
 						chunkQM = q_m / n_threads; //number of vertical blockpieces in A per thread
@@ -1474,14 +1472,12 @@ namespace opt{
 						if (rem == 0) {
 							//F alpha, T A, int stride_row_a, int stride_col_a,F beta, T C, int stride_row_c, int stride_col_c, int m_max,int q_m, int q_k, int r_m, int r_k
 							ts[i] = std::thread(sylrk_explicit<T, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM, 0, q_m, q_k, r_m, r_k, panels_so_far); //there are no matrix A, B to multiply C with
-								//As+=stride_col_a*chunkM;
 							Cs += stride_col_c * chunkM;
 							panels_so_far += chunkQM;
 						}
 						else {
 							//	std::cout<<"hier\n";
 							ts[i] = std::thread(sylrk_explicit<T, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM + 1, 0, q_m, q_k, r_m, r_k, panels_so_far); //there are no matrix A, B to multiply C with
-							//As+=stride_col_a*(chunkM+MC);
 							Cs += stride_col_c * (chunkM + MC);
 							rem--;
 							panels_so_far += chunkQM + 1;
@@ -1509,35 +1505,37 @@ namespace opt{
 			This function calculates a variant of the Cholesky decomposition. The traversal for the factors is 
 			column wise (Cholesky–Crout traversal).*/
 			export template<class T,class F>
-			void choi(size_t n, T A, int stride_row, int stride_col){
+			void choi_single(size_t n, T A, int stride_row, int stride_col){
 				F* D=new F[n]();
 				for (int j=0;j<n;j++){
 					for (int i=0;i<j;i++){
 						D[j]-=A[j*stride_col+i]*A[j*stride_col+i]*D[i];
 					}
-					A[j*stride_col+j]+=D[j];
-					D[j]=A[j*n+j];
+					A[j*stride_col+j*stride_row]+=D[j];
+					D[j]=A[j*stride_col+j*stride_row];
 					F D_inv=1/D[j];
 					for (int i=j+1;i<n;i++){	
 						F sum=0.0;		
 						for (int t=0;t<j;t++){
-							sum-=A[i*stride_col+t]*A[j*stride_col+t]*D[t];
+							sum-=A[i*stride_col+t*stride_row]*A[j*stride_col+t*stride_row]*D[t];
 						}
 						
-						A[i*stride_col+j]+=sum;
-						A[i*stride_col+j]*=D_inv;
-						A[j*stride_col+i]=0.0; //can be removed if I don't want to have zeros
+						A[i*stride_col+j*stride_row]+=sum;
+						A[i*stride_col+j*stride_row]*=D_inv;
+						A[j*stride_col+i*stride_row]=0.0; //can be removed if I don't want to have zeros
 					}
 				}
+				delete[] D;
 			}
 			
 			/*Solves A=LDL^T with diagonal D and lower triangular L. Result is stored back into A (in place).
 			Important: In contrast to choi, this function assumes that the input matrix A is in triangular packed format,
 			i.e. only the lower triangle including the diagonal is stored.
 			This function calculates a variant of the Cholesky decomposition. The traversal for the factors is 
-			column wise (Cholesky–Crout traversal).*/
+			column wise (Cholesky–Crout traversal).
+			TODO: Matrix strides not working yet*/
 			export template<class T,class F>
-			void choip(size_t n, T A, int stride_row, int stride_col){
+			void choip_single(size_t n, T A, int stride_row, int stride_col){
 				F* D=new F[n]();
 				for (int j=0;j<n;j++){
 					int ix1=j*0.5*(j+1)+j*stride_col;
@@ -1562,21 +1560,21 @@ namespace opt{
 			}
 
 
-			//inverse of lowertriangular matrix
+			//inverse of lowertriangular matrix L, i.e. calculates L^{-1}
 			template<class T, class F>
-			void lower_inv(T A, T res, int n) {
+			void lower_inv(int n, T A, int stride_row_a, int stride_col_a, T C, int stride_row_c, int stride_col_c) {
 				for (int i = 0; i < n; i++) {
 					for (int j = 0; j <= i; j++) {
 						if (j = i) {
-							res[i * n + i] = 1 / A[i * n + i];
+							C[i * stride_col_c + i*stride_row_c] = 1 / A[i*stride_col_a + i*stride_row_a];
 						}
 						else {
 							F sum = 0.0;
 							for (int k = j; k <= i - 1; k++) {
-								sum -= A[i * n + k] + res[k * n + j];
+								sum -= A[i*stride_col_a + k*stride_row_a] + C[k * stride_col_c + j*stride_row_c];
 							}
-							sum /= A[i * n + i];
-							res[i * n + j] = sum;
+							sum /= A[i * stride_col_a + i*stride_row_a];
+							C[i * stride_col_c + j*stride_row_a] = sum;
 						}
 					}
 				}
@@ -1585,56 +1583,62 @@ namespace opt{
 			//inverse of D*L,whereas D is diagonal and L lower triangular
 			template<class T, class F>
 			void diag_lower_inv(int n, T A, int stride_row_a, int stride_col_a, T C, int stride_row_c, int stride_col_c) {
-				for (int i = 0; i < n; i++) {
-					for (int j = 0; j <= i; j++) {
-						if (j = i) {
-							C[i * stride_col_c + i * stride_row_c] = F(1.0) / A[i * stride_col_a + i * stride_row_a];
+				for (int i=0;i<n;i++){
+					for (int j=0;j<=i;j++){
+						if (j==i){
+						
+							C[i*stride_col_c+i*stride_row_c]=F(1.0)/A[i*stride_col_a+i*stride_row_a];
 						}
-						else {
-							F sum = 0.0;
-							for (int k = j; k <= i - 1; k++) {
-								sum -= A[i * stride_col_a + i * stride_row_a] * A[i * stride_col_a + k * stride_row_a] + C[k * stride_col_c + j * stride_row_c];
+						else{
+							F sum=0.0;
+							for (int k=j;k<=i-1;k++){
+								sum-=A[i*stride_col_a+k*stride_row_a]*C[k*stride_col_c+j*stride_row_c];
 							}
-							sum /= A[i * stride_col_a + i * stride_row_a];
-							C[i * stride_col_c + j * stride_row_c] = sum;
+							C[i*stride_col_c+j*stride_row_c]=sum;
 						}
 					}
 				}
 			}
-
+			
+			//inverse of D*U,whereas D is diagonal and U upper triangular
 			template<class T, class F>
-			void choi_blocked(int n, T A, int stride_row_a, int stride_col_a) {
+			void diag_upper_inv(int n, T A, int stride_row_a, int stride_col_a, T C, int stride_row_c, int stride_col_c) {
+				for (int i=n-1;i>=0;i--){
+					for (int j=n-1;j>=i;j--){
+						if (j==i){
+						
+							C[i*stride_col_c+i*stride_row_c]=F(1.0)/A[i*stride_col_a+i*stride_row_a];
+						}
+						else{
+							F sum=0.0;
+							for (int k=j;k>=i+1;k--){
+								sum-=A[i*stride_col_a+k*stride_row_a]*C[k*stride_col_c+j*stride_row_c];
+							}
+							C[i*stride_col_c+j*stride_row_c]=sum;
+						}
+					}
+				}
+			}			
 
-				int d = 256;
-				int q = n / d;
-				int rem = n % d;
-
-				auto A11 = A;
-				auto A21 = A + d * n;
-				auto A22 = A + d * n + d;
-
-				F temp1[d * d];
-				F temp2[(n - d) * d];
-
-				for (int i = 0; i < q; i++) {
-					//choi_ip<T, F>(d, A11, 1, n);
-					A11 += d * n;
-					//dl_inv(d, A11, 1, n, temp1, 1, d);
-					//co::mul::dcopy(n - d, d, A21, stride_row_a, stride_col_a, temp2, 1, d);
-
-					//co::mul::dgemm_nn(n - d, d, d, F(1.0), temp2, 1, n, temp1, 1, d, 0.0, A21, 1, n);
-
-
+			
+			//Calculates D*L, whereas D is diagonal and L is lower triangular.
+			template<class T,class F>
+			void dl_gemm_micro_kernel(int n, int k,T D, int stride_row_d, int stride_col_d, T A, int stride_row_a, int stride_col_a, T C, int stride_row_c, int stride_col_c){
+				
+				F* _D=new double[n];
+				
+				//Copy the diagonal elements for caching
+				for (int i=0;i<n;i++){
+					_D[i]=D[i*stride_col_d+i*stride_row_d];
 				}
 
-				if (rem) {
-					d = rem;
-
-					//repeat calculation
-
+				for (int i=0;i<k;i++){
+					for (int j=0;j<n;j++){
+						C[i*stride_col_c+j*stride_row_c]=A[i*stride_col_a+j*stride_row_a]*_D[i];
+					}
 				}
-
-			}
+				delete _D;
+			}			
 
 			//Calculates L*D*y=b for=LDL^T
 			template<class T, class F>
@@ -1668,6 +1672,72 @@ namespace opt{
 				F y[n];
 				choi_forward_sub(n, A, stride_row_a, stride_col_a, b, stride_b, y);
 				choi_backward_sub(n, A, stride_row_a, stride_col_a, y, x, stride_x);
+			}
+			
+			export template<class T,class F>
+			void choi(int n, T A, const int stride_row_a, const int stride_col_a){
+				int BLOCKSIZE=200;
+				int d;
+				int q;
+				int rem;
+			//	std::cout<<"drin\n";
+			//	std::cout<<" n<d:"<<(n<d)<<"\n";
+				if (n<BLOCKSIZE){
+					d=n;
+					q=1;
+					rem=0;
+				}
+				else{
+					d=BLOCKSIZE;
+					q=n/d;
+					rem=n%d;
+				}
+				
+				std::cout<<"n:"<<n<<" d:"<<d<<" rem"<<rem<<"\n";
+				T A11=A;
+				T A21=A+d*stride_col_a;
+				T A22=A+d*stride_col_a+d*stride_row_a;
+
+				F* temp1=new F[d*d]();
+				
+				F* temp2=new F[(n-d)*d]();
+
+				for (int i=0;i<q;i++){
+
+					choi_single<T,F>(d, A11, stride_row_a,stride_col_a);
+					
+					diag_upper_inv<T,F>(d,A11,stride_col_a,stride_row_a,temp1,1,d);
+					dcopy(n-d,d,A21,stride_row_a,stride_col_a,temp2,1,d);
+					
+					gemm(n-d,d,d,F(1.0),temp2,1,d,temp1,1,d,0.0,A21,1,stride_col_a);
+					dl_gemm_micro_kernel<T,F>(n-d,d,A11,stride_row_a, stride_col_a, A21, stride_col_a, stride_row_a,temp2,1,n-d);
+					A11+=d*stride_row_a+d*stride_col_a;
+					gemm(n-d,n-d,d,F(-1.0),A21,stride_row_a,stride_col_a,temp2,1,n-d,F(1.0),A11,stride_row_a,stride_col_a);
+					A21=A11+d*stride_col_a;	
+					n-=d;
+					
+				}
+
+				if (rem){
+					d=rem;
+					std::cout<<"d drin:"<<d<<" n:"<<n<<"\n";
+					std::cout<<"A11"<<A11[stride_col_a]<<"\n";
+					choi_single<T,F>(d, A11, stride_row_a,stride_col_a);
+					std::cout<<"A11 nun"<<A11[stride_col_a]<<"\n";
+					
+					diag_upper_inv<T,F>(d,A11,stride_col_a,stride_row_a,temp1,1,d);
+					dcopy(n-d,d,A21,stride_row_a,stride_col_a,temp2,1,d);			
+					gemm(n-d,d,d,F(1.0),temp2,1,d,temp1,1,d,0.0,A21,1,stride_col_a);
+					dl_gemm_micro_kernel<T,F>(n-d,d,A11,stride_row_a, stride_col_a, A21, stride_col_a, stride_row_a,temp2,1,n-d);
+					A11+=d*stride_row_a+d*stride_col_a;
+					gemm(n-d,n-d,d,F(-1.0),A21,stride_row_a,stride_col_a,temp2,1,n-d,F(1.0),A11,stride_row_a,stride_col_a);
+					
+					
+				}
+				
+				delete[] temp1;
+				delete[] temp2;
+				
 			}
 		
 		}
