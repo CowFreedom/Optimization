@@ -300,7 +300,7 @@ namespace opt{
 			export bool cholesky_2(std::ostream& os, CorrectnessTest& v){
 	
 				std::random_device rd;
-				std::uniform_real_distribution<> dist(300, 300); // distribution in range [1, 6];		
+				std::uniform_real_distribution<> dist(2, 600); // distribution in range [1, 6];		
 				bool is_correct;
 				for (int i = 0; i < 20; i++) {
 					int n = dist(rd);
@@ -314,50 +314,34 @@ namespace opt{
 					double* temp = new double[n * n]();
 					opt::test::fill_container_randomly<double*, double>(rd, A, n * k);
 					//Create symmetric matrix C
-		//			std::cout<<"hier0\n";
 					opt::math::cpu::gemm(n, n, k, 1.0, A, 1, k, A, k, 1,0.0, C, 1, n);
-					
-//std::cout<<"hier1\n";					
-//printmat("A", A, n,k, std::cout);
-
 					delete[] A;
 					
 					double* C_copy=new double[n*n]();
 					for (int i = 0; i < n * n; i++) {
 						C_copy[i] = C[i];
 					}
-				
-				//	std::cout<<"Aat[60200]"<<C[60200]<<"\n";
-					
-//					printmat("AAt", C_copy, n,n, std::cout);
-					
+
 					opt::math::cpu::choi<double*, double>(n, C, 1, n);
-				std::cout<<"C[60200]"<<C[60200]<<"\n";
-				std::cin.get();
-//	std::cout<<"hier2\n";
-//					printmat("LD compact", C, n,n, std::cout);	
+
 					for (int i=0; i<n;i++){
 						for (int j=0;j<i;j++){
 							L[i*n+j]=C[i*n+j];
 						}
 						L[i*n+i]=1;
 					}
-//					printmat("L", L, n,n, std::cout);
 					for (int i=0;i<n;i++){
 						D[i*n+i]=C[i*n+i];
 					}
-					
-//					printmat("D", D, n,n, std::cout);
-//					std::cout<<"hier3\n";
 					opt::math::cpu::gemm(n, n, n, 1.0, D, 1, n, L, n, 1,0.0, temp, 1, n); //calculate intermediate result D*L^T from LDL^T
 					opt::math::cpu::gemm(n, n, n, 1.0, L, 1, n, temp, 1, n,0.0, C, 1, n);
-//					printmat("C", C, n,n, std::cout);
-//							std::cout<<"\n\n";	
-					bool is_correct=verify_calculation(C_copy, C, n*n, 0.01);
+					is_correct = verify_calculation(C,C_copy, n*n, 0.1);
 					delete[] C;
 					delete[] C_copy;
 					delete[] temp;
 					delete[] L;
+					delete[] D;
+					
 					if (is_correct==false){
 						return v.test_successful=false;
 						return false;

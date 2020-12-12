@@ -1632,8 +1632,8 @@ namespace opt{
 					_D[i]=D[i*stride_col_d+i*stride_row_d];
 				}
 
-				for (int i=0;i<k;i++){
-					for (int j=0;j<n;j++){
+				for (int i=0;i<n;i++){
+					for (int j=0;j<k;j++){
 						C[i*stride_col_c+j*stride_row_c]=A[i*stride_col_a+j*stride_row_a]*_D[i];
 					}
 				}
@@ -1680,8 +1680,6 @@ namespace opt{
 				int d;
 				int q;
 				int rem;
-			//	std::cout<<"drin\n";
-			//	std::cout<<" n<d:"<<(n<d)<<"\n";
 				if (n<BLOCKSIZE){
 					d=n;
 					q=1;
@@ -1692,8 +1690,6 @@ namespace opt{
 					q=n/d;
 					rem=n%d;
 				}
-				
-				std::cout<<"n:"<<n<<" d:"<<d<<" rem"<<rem<<"\n";
 				T A11=A;
 				T A21=A+d*stride_col_a;
 				T A22=A+d*stride_col_a+d*stride_row_a;
@@ -1708,31 +1704,23 @@ namespace opt{
 					
 					diag_upper_inv<T,F>(d,A11,stride_col_a,stride_row_a,temp1,1,d);
 					dcopy(n-d,d,A21,stride_row_a,stride_col_a,temp2,1,d);
-					
-					gemm(n-d,d,d,F(1.0),temp2,1,d,temp1,1,d,0.0,A21,1,stride_col_a);
-					dl_gemm_micro_kernel<T,F>(n-d,d,A11,stride_row_a, stride_col_a, A21, stride_col_a, stride_row_a,temp2,1,n-d);
+					gemm(n-d,d,d,F(1.0),temp2,1,d,temp1,1,d,0.0,A21,stride_row_a,stride_col_a); //A21*(D1*L11^T)=L21
+					dl_gemm_micro_kernel<T,F>(d,n-d,A11,stride_row_a, stride_col_a, A21, stride_col_a, stride_row_a,temp2,1,n-d);
 					A11+=d*stride_row_a+d*stride_col_a;
 					gemm(n-d,n-d,d,F(-1.0),A21,stride_row_a,stride_col_a,temp2,1,n-d,F(1.0),A11,stride_row_a,stride_col_a);
 					A21=A11+d*stride_col_a;	
 					n-=d;
-					
 				}
 
 				if (rem){
 					d=rem;
-					std::cout<<"d drin:"<<d<<" n:"<<n<<"\n";
-					std::cout<<"A11"<<A11[stride_col_a]<<"\n";
 					choi_single<T,F>(d, A11, stride_row_a,stride_col_a);
-					std::cout<<"A11 nun"<<A11[stride_col_a]<<"\n";
-					
 					diag_upper_inv<T,F>(d,A11,stride_col_a,stride_row_a,temp1,1,d);
-					dcopy(n-d,d,A21,stride_row_a,stride_col_a,temp2,1,d);			
-					gemm(n-d,d,d,F(1.0),temp2,1,d,temp1,1,d,0.0,A21,1,stride_col_a);
-					dl_gemm_micro_kernel<T,F>(n-d,d,A11,stride_row_a, stride_col_a, A21, stride_col_a, stride_row_a,temp2,1,n-d);
+					dcopy(n-d,d,A21,stride_row_a,stride_col_a,temp2,1,d);	
+					gemm(n-d,d,d,F(1.0),temp2,1,d,temp1,1,d,0.0,A21,stride_row_a,stride_col_a); //A21*(D1*L11^T)=L21
+					dl_gemm_micro_kernel<T,F>(d,n-d,A11,stride_row_a, stride_col_a, A21, stride_col_a, stride_row_a,temp2,1,n-d);
 					A11+=d*stride_row_a+d*stride_col_a;
-					gemm(n-d,n-d,d,F(-1.0),A21,stride_row_a,stride_col_a,temp2,1,n-d,F(1.0),A11,stride_row_a,stride_col_a);
-					
-					
+					gemm(n-d,n-d,d,F(-1.0),A21,stride_row_a,stride_col_a,temp2,1,n-d,F(1.0),A11,stride_row_a,stride_col_a);				
 				}
 				
 				delete[] temp1;
