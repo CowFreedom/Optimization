@@ -25,8 +25,8 @@ namespace opt{
 				for (int i=0;i<n_elems;i++){
 					F val=A[i]-B[i];
 					val=(val<0)?-val:val;
-					if (val>tol){
-					std::cout<<"Error at:"<<i<<"\n";
+					if (val>tol || (std::isinf(A[i])) || (std::isinf(B[i])) ||(std::isnan(A[i])) || (std::isnan(B[i]))){
+					//std::cout<<"Error at:"<<i<<"\n";
 						return false;
 					}
 				}
@@ -300,23 +300,33 @@ namespace opt{
 			export bool cholesky_2(std::ostream& os, CorrectnessTest& v){
 	
 				std::random_device rd;
-				std::uniform_real_distribution<> dist(2, 600); // distribution in range [1, 6];		
+				std::uniform_real_distribution<> dist(1, 300); // distribution in range [1, 6];		
 				bool is_correct;
 				for (int i = 0; i < 20; i++) {
 					int n = dist(rd);
 					int k = dist(rd);;
-				
-					double* A = new double[n * k]();
+					int m=1; //lower threshold for eigenvalue of 0.5*(A+A^T)+m*I eigenvalue
+					double* A = new double[n * n]();
 					double* L = new double[n*n]();
 					double* D = new double[n*n]();
 					double* C = new double[n * n]();
 
 					double* temp = new double[n * n]();
-					opt::test::fill_container_randomly<double*, double>(rd, A, n * k);
+					opt::test::fill_container_randomly<double*, double>(rd, A, n * n);
 					//Create symmetric matrix C
-					opt::math::cpu::gemm(n, n, k, 1.0, A, 1, k, A, k, 1,0.0, C, 1, n);
-					delete[] A;
+					for (int i=0;i<n;i++){
+						for (int j=0;j<n;j++){
+							if (i!=j){
+								C[i*n+j]=0.5*(A[i*n+j]+A[i+j*n]);
+							}
+							else{
+								C[i*n+j]=0.5*(A[i*n+j]+A[i+j*n])+m;
+							}
+						}
 					
+					}
+					
+					delete[] A;
 					double* C_copy=new double[n*n]();
 					for (int i = 0; i < n * n; i++) {
 						C_copy[i] = C[i];
@@ -356,37 +366,74 @@ namespace opt{
 
 				std::random_device rd;
 
-				std::uniform_real_distribution<> dist(1, 300); // distribution in range [1, 6];		
+				std::uniform_real_distribution<> dist(1, 20); // distribution in range [1, 6];		
 
 				bool is_correct;
 				for (int i = 0; i < 20; i++) {
 					int n = dist(rd);
-					int k = dist(rd);
-					double beta = 0;
-					double alpha = 1.0;
-					double* A = new double[n * k];
+					int m=1;//lower threshold for eigenvalue of 0.5*(A+A^T)+m*I eigenvalue
+
+					double* A = new double[n * n];
 					double* C = new double[n * n];
 					double* C_copy = new double[n * n];
-					opt::test::fill_container_randomly<double*, double>(rd, A, n * k);
+					opt::test::fill_container_randomly<double*, double>(rd, A, n * n);
 					//Create symmetric matrix C
-					opt::math::cpu::sylrk(n, k, alpha, A, 1, k, beta, C, 1, n);
-
+					for (int i=0;i<n;i++){
+						for (int j=0;j<n;j++){
+							if (i!=j){
+								C[i*n+j]=0.5*(A[i*n+j]+A[i+j*n]);
+							}
+							else{
+								C[i*n+j]=0.5*(A[i*n+j]+A[i+j*n])+m;
+							}
+						}
+					}
+					delete[] A;
 					for (int i = 0; i < n * n; i++) {
 						C_copy[i] = C[i];
 					}
-					
+					//printmat("AAt",C,n,n,std::cout);
 					opt::math::cpu::choi<double*, double>(n, C, 1, n);
-
+					
 					double* b = new double[n];
 					double* x = new double[n];
 					double* res = new double[n];
 					opt::test::fill_container_randomly<double*, double>(rd, b, n);
-
-				//	opt::math::cpu::choi_solve(n, C, 1, n, b, 1, x, 1); //HINZUFÜGEN; TEMPLATES BEACHTEN
-
-					opt::math::cpu::dgmv(n,n, 1.0, A, 1, n,x,1, 0.0, res,1);
+					opt::math::cpu::choi_solve<double*,double>(n, C, 1, n, b, 1, x, 1);
+					//printmat("C",C,n,n,std::cout);
+					//printmat("b",b,n,1,std::cout);
+					//printmat("x",x,n,1,std::cout);
+					
+					//Test if LDL^T composition is valid
+					
+					double* L=new double[n*n]();
+					double* D=new double[n*n]();
+					double* temp=new double[n*n]();
+					
+					for (int i=0; i<n;i++){
+						for (int j=0;j<i;j++){
+							L[i*n+j]=C[i*n+j];
+						}
+						L[i*n+i]=1;
+					}
+					for (int i=0;i<n;i++){
+						D[i*n+i]=C[i*n+i];
+					}
+					opt::math::cpu::gemm(n, n, n, 1.0, D, 1, n, L, n, 1,0.0, temp, 1, n); //calculate intermediate result D*L^T from LDL^T
+					opt::math::cpu::gemm(n, n, n, 1.0, L, 1, n, temp, 1, n,0.0, C, 1, n);
+					//printmat("LDL^T",C,n,n,std::cout);
+					bool ldl_is_correct = verify_calculation(C,C_copy, n*n, 0.01);
+					//std::cout<<"Ldl is correct: "<<ldl_is_correct<<"\n";
+					delete[] L;
+					delete[] D;
+					delete[] temp;
+					
+					//end ldl test
+					opt::math::cpu::dgmv(n,n, 1.0, C_copy, 1, n,x,1, 0.0, res,1);
+					//printmat("Ax:",res,n,1,std::cout);
 					is_correct = verify_calculation(b,res, n, 0.1);
-					delete[] A;
+
+					
 					delete[] C;
 					delete[] b;
 					delete[] C_copy;

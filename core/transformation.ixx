@@ -1659,7 +1659,7 @@ namespace opt{
 				for (int i = n - 1; i >= 0; i--) {
 					x[i * stride_x] += y[i];
 					for (int j = i - 1; j >= 0; j--) {
-						x[j * stride_x] -= A[i * stride_col_a + j * stride_row_a] * x[i * stride_x];
+						x[j * stride_x] -= A[j * stride_col_a + i * stride_row_a] * x[i * stride_x];
 					}
 				}
 			}
@@ -1669,9 +1669,10 @@ namespace opt{
 				for (int i = 0; i < n; i++) {
 					x[i * stride_x] = F(0.0);
 				}
-				F y[n];
-				choi_forward_sub(n, A, stride_row_a, stride_col_a, b, stride_b, y);
-				choi_backward_sub(n, A, stride_row_a, stride_col_a, y, x, stride_x);
+				F* y=new F[n];
+				choi_forward_sub<double*, double>(n, A, stride_row_a, stride_col_a, b, stride_b, y);
+				choi_backward_sub<double*,double>(n, A, stride_col_a, stride_row_a, y, x, stride_x);
+				delete y;
 			}
 			
 			export template<class T,class F>
@@ -1701,7 +1702,6 @@ namespace opt{
 				for (int i=0;i<q;i++){
 
 					choi_single<T,F>(d, A11, stride_row_a,stride_col_a);
-					
 					diag_upper_inv<T,F>(d,A11,stride_col_a,stride_row_a,temp1,1,d);
 					dcopy(n-d,d,A21,stride_row_a,stride_col_a,temp2,1,d);
 					gemm(n-d,d,d,F(1.0),temp2,1,d,temp1,1,d,0.0,A21,stride_row_a,stride_col_a); //A21*(D1*L11^T)=L21
