@@ -27,7 +27,7 @@ namespace opt{
 					offset[0]=x;
 					offset[1]=y;
 				}
-				std::array<double,2> offset={0,0};
+				std::array<typename T::value_type,2> offset={0,0};
 				void res_circle(C params, T storage){
 					typename T::value_type x0=*params;
 					typename T::value_type x1=*(params+1);
@@ -205,6 +205,73 @@ namespace opt{
 					return true;
 				}
 			}
+			
+			//Tests of gaussnewton cpu
+			
+			template<class C, class T>
+			class CircleB{
+			
+				public:
+				CircleB(int x, int y){
+					offset[0]=x;
+					offset[1]=y;
+				}
+				std::array<typename T::value_type,2> offset={0,0};
+				void residual(C params, T storage){
+					typename T::value_type x0=*params;
+					typename T::value_type x1=*(params+1);
+					*storage=x0-offset[0];
+					*(storage+1)=x1-offset[1];
+				}
+
+				void jacobian(C x, T storage){
+					typename T::value_type x0=*x;
+					typename T::value_type x1=*(x+1);
+					*storage=1;
+					*(storage+1)=0;
+					*(storage+2)=0;
+					*(storage+3)=1;	
+				}
+
+				const int rdim=2;
+				const int xdim=2;
+				
+			};
+			
+			export bool gauss_newton_example3(std::ostream& os, CorrectnessTest& v){
+				std::vector<double> x0={-0.3,-0.3};
+				int tol=1e-10;
+				int x1=0;
+				int x2=0;
+				CircleB<std::vector<double>::const_iterator, std::vector<double>::iterator> c(x1,x2);
+				using std::placeholders::_1;
+				using std::placeholders::_2;
+				
+				std::function<void(std::vector<double>::const_iterator, std::vector<double>::iterator)> f1=std::bind(&CircleB<std::vector<double>::const_iterator, std::vector<double>::iterator>::residual,c,_1,_2);
+				std::function<void(std::vector<double>::const_iterator, std::vector<double>::iterator)> f2=std::bind(&CircleB<std::vector<double>::const_iterator, std::vector<double>::iterator>::jacobian,c,_1,_2);
+				
+				opt::solvers::GNSCPU<std::vector<double>,std::function<void(std::vector<double>::const_iterator, std::vector<double>::iterator)>,opt::solvers::gns::HasJacInv::No> gns(f1,f2,c.xdim,c.rdim,std::cout);
+				gns.tol=tol;
+				auto result=gns.run(x0);
+				
+				if (result){
+					double sum=((*result)[0]+x1)*((*result)[0]+x1)+((*result)[1]+x2)*((*result)[1]+x2);
+					if(sum>tol){
+							return false;						
+					}
+					else{
+			
+						v.test_successful=true;
+						return true;
+					}
+					
+				}
+				else{
+					return false;
+				}
+				
+			}			
+			
 		}
 	
 	}

@@ -366,7 +366,7 @@ namespace opt{
 
 				std::random_device rd;
 
-				std::uniform_real_distribution<> dist(1, 20); // distribution in range [1, 6];		
+				std::uniform_real_distribution<> dist(100, 1000); // distribution in range [1, 6];		
 
 				bool is_correct;
 				for (int i = 0; i < 20; i++) {
@@ -399,7 +399,7 @@ namespace opt{
 					double* x = new double[n];
 					double* res = new double[n];
 					opt::test::fill_container_randomly<double*, double>(rd, b, n);
-					opt::math::cpu::choi_solve<double*,double>(n, C, 1, n, b, 1, x, 1);
+					opt::math::cpu::choi_solve<double*,double*,double*,double>(n, C, 1, n, b, 1, x, 1);
 					//printmat("C",C,n,n,std::cout);
 					//printmat("b",b,n,1,std::cout);
 					//printmat("x",x,n,1,std::cout);

@@ -53,6 +53,7 @@ bool run_correctness_tests(std::ostream& os, bool save_metrics){
 	v.push_back(opt::test::CorrectnessTest("gauss_newton_example1",opt::test::corr::gauss_newton_example1));
 	v.push_back(opt::test::CorrectnessTest("gauss_newton_example1_fptr",opt::test::corr::gauss_newton_example1_fptr));
 	v.push_back(opt::test::CorrectnessTest("gauss_newton_example2",opt::test::corr::gauss_newton_example2));
+	v.push_back(opt::test::CorrectnessTest("gauss_newton_example3",opt::test::corr::gauss_newton_example3));
 	
 //	v.push_back(opt::test::CorrectnessTest("gemm dim(A)=(2,2), dim(B)=(2,2)",opt::test::corr::matrix_multiplication_1));
 //	v.push_back(opt::test::CorrectnessTest("gemm dim(A)=(1000,1000), dim(B)=(1000,1000)",opt::test::corr::matrix_multiplication_2));

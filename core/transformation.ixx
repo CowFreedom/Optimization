@@ -432,9 +432,9 @@ namespace opt{
 
 			}
 
-			template<class T, class F>
-			void gemm_single(size_t m, size_t n, size_t k, F alpha, T A, size_t stride_row_a, size_t stride_col_a,
-				T B, size_t stride_row_b, size_t stride_col_b, F beta, T C, size_t stride_row_c, size_t stride_col_c) {
+			template<class TA,class TB, class TC, class F>
+			void gemm_single(size_t m, size_t n, size_t k, F alpha, TA A, size_t stride_row_a, size_t stride_col_a,
+				TB B, size_t stride_row_b, size_t stride_col_b, F beta, TC C, size_t stride_row_c, size_t stride_col_c) {
 				
 				size_t q_m = (m + MC - 1) / MC; //number of horizontal blocks
 				size_t q_n = (n + NC - 1) / NC;
@@ -491,9 +491,9 @@ namespace opt{
 			}
 			
 			//Matrix multiplication with explicitly given buffers and problem dependent blocksizes. 
-			template<class T, class F>
-			void gemm_explicit(size_t m, size_t n, size_t k, F alpha, T A, size_t stride_row_a, size_t stride_col_a,
-				T B, size_t stride_row_b, size_t stride_col_b, F beta, T C, size_t stride_row_c, size_t stride_col_c,size_t q_m, size_t q_n, size_t q_k, size_t r_m, size_t r_n, size_t r_k) {
+			template<class TA, class TB, class TC, class F>
+			void gemm_explicit(size_t m, size_t n, size_t k, F alpha, TA A, size_t stride_row_a, size_t stride_col_a,
+				TB B, size_t stride_row_b, size_t stride_col_b, F beta, TC C, size_t stride_row_c, size_t stride_col_c,size_t q_m, size_t q_n, size_t q_k, size_t r_m, size_t r_n, size_t r_k) {
 
 				double* _A=new double[KC * MC];
 				double* _B= new double[KC * NC];
@@ -520,9 +520,9 @@ namespace opt{
 				delete[] _C;			
 			}
 
-			export template<class T, class F>
-			void gemm(size_t m, size_t n, size_t k, F alpha, T A, size_t stride_row_a, size_t stride_col_a,
-				T B, size_t stride_row_b, size_t stride_col_b, F beta, T C, size_t stride_row_c, size_t stride_col_c) {
+			export template<class TA, class TB, class TC, class F>
+			void gemm(size_t m, size_t n, size_t k, F alpha, TA A, size_t stride_row_a, size_t stride_col_a,
+				TB B, size_t stride_row_b, size_t stride_col_b, F beta, TC C, size_t stride_row_c, size_t stride_col_c) {
 				size_t q_m = (m + MC - 1) / MC; //number of vertical blocks of A
 				size_t q_n = (n + NC - 1) / NC;
 				size_t q_k = (k + KC - 1) / KC;
@@ -644,13 +644,13 @@ namespace opt{
 					*/
 					std::vector<std::thread> ts(n_threads);	
 					int rem=0;
-					T Cs=C;	
+					TC Cs=C;	
 					
 					if (m>=n){
 						int chunkM;
 						int chunkQM=q_m;
 							
-						T As=A;							
+						TA As=A;							
 									
 						if (q_m>n_threads){
 							chunkQM=q_m/n_threads; //number of vertical blockpieces in A per thread
@@ -667,12 +667,12 @@ namespace opt{
 						for (int i=0;i<(n_threads-1);i++){
 							if (rem==0){
 
-								ts[i]=std::thread(gemm_explicit<T,F>,chunkM,n,k, alpha, As,stride_row_a,stride_col_a,B,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,chunkQM,q_n,q_k,0,r_n, r_k); //there are no matrix A, B to multiply C with
+								ts[i]=std::thread(gemm_explicit<TA,TB,TC,F>,chunkM,n,k, alpha, As,stride_row_a,stride_col_a,B,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,chunkQM,q_n,q_k,0,r_n, r_k); //there are no matrix A, B to multiply C with
 								As+=chunkQM*MC*stride_col_a;
 								Cs+=chunkQM*MC*stride_col_c;
 							}
 							else{
-								ts[i]=std::thread(gemm_explicit<T,F>,chunkM+MC,n,k, alpha, As,stride_row_a,stride_col_a,B,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,chunkQM+1,q_n,q_k,0,r_n, r_k); //there are no matrix A, B to multiply C with
+								ts[i]=std::thread(gemm_explicit<TA,TB,TC,F>,chunkM+MC,n,k, alpha, As,stride_row_a,stride_col_a,B,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,chunkQM+1,q_n,q_k,0,r_n, r_k); //there are no matrix A, B to multiply C with
 								As+=(chunkQM+1)*MC*stride_col_a;
 								Cs+=(chunkQM+1)*MC*stride_col_c;					
 								rem--;
@@ -680,7 +680,7 @@ namespace opt{
 							}
 						}
 			
-						ts[n_threads-1]=std::thread(gemm_explicit<T,F>,leftover,n,k, alpha, As,stride_row_a,stride_col_a,B,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,chunkQM,q_n,q_k,leftover%MC,r_n, r_k);
+						ts[n_threads-1]=std::thread(gemm_explicit<TA,TB,TC,F>,leftover,n,k, alpha, As,stride_row_a,stride_col_a,B,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,chunkQM,q_n,q_k,leftover%MC,r_n, r_k);
 						
 						for (int i=0;i<n_threads;i++){
 							ts[i].join();
@@ -690,7 +690,7 @@ namespace opt{
 					else{
 						int chunkN;
 						int chunkQN=q_n;
-						T Bs=B;					
+						TB Bs=B;					
 						if (q_n>n_threads){
 							chunkQN=q_n/n_threads; //number of horizontal blockpieces in B per thread
 							rem=q_n%n_threads;
@@ -705,18 +705,18 @@ namespace opt{
 						
 						for (int i=0;i<(n_threads-1);i++){
 							if (rem==0){
-								ts[i]=std::thread(gemm_explicit<T,F>,m,chunkN,k, alpha, A,stride_row_a,stride_col_a,Bs,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,q_m,chunkQN,q_k,r_m,0, r_k); //there are no matrix A, B to multiply C with
+								ts[i]=std::thread(gemm_explicit<TA,TB,TC,F>,m,chunkN,k, alpha, A,stride_row_a,stride_col_a,Bs,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,q_m,chunkQN,q_k,r_m,0, r_k); //there are no matrix A, B to multiply C with
 								Bs+=chunkQN*NC*stride_row_b;
 								Cs+=chunkQN*NC*stride_row_c;
 							}
 							else{
-								ts[i]=std::thread(gemm_explicit<T,F>,m,chunkN+NC,k, alpha, A,stride_row_a,stride_col_a,Bs,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,q_m,chunkQN+1,q_k,r_m,0, r_k); //there are no matrix A, B to multiply C with
+								ts[i]=std::thread(gemm_explicit<TA,TB,TC,F>,m,chunkN+NC,k, alpha, A,stride_row_a,stride_col_a,Bs,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,q_m,chunkQN+1,q_k,r_m,0, r_k); //there are no matrix A, B to multiply C with
 								Bs+=(chunkQN+1)*NC*stride_row_b;
 								Cs+=(chunkQN+1)*NC*stride_row_c;					
 								rem--;
 							}
 						}
-						ts[n_threads-1]=std::thread(gemm_explicit<T,F>,m,leftover,k, alpha, A,stride_row_a,stride_col_a,Bs,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,q_m,chunkQN,q_k,r_m,leftover%NC, r_k);
+						ts[n_threads-1]=std::thread(gemm_explicit<TA,TB,TC,F>,m,leftover,k, alpha, A,stride_row_a,stride_col_a,Bs,stride_row_b,stride_col_b,beta,Cs,stride_row_c,stride_col_c,q_m,chunkQN,q_k,r_m,leftover%NC, r_k);
 						
 						for (int i=0;i<n_threads;i++){
 							ts[i].join();
@@ -857,8 +857,8 @@ namespace opt{
 			}
 			
 			/*Copies from array source to dest*/
-			template<class T>
-			void dcopy(int m, int n, T source, size_t stride_row_source, size_t stride_col_source, T dest, size_t stride_row_dest,size_t stride_col_dest){
+			template<class TS, class TD>
+			void dcopy(int m, int n, TS source, size_t stride_row_source, size_t stride_col_source, TD dest, size_t stride_row_dest,size_t stride_col_dest){
 				for (int i=0;i<m;i++){
 					for (int j=0;j<n;j++){
 						dest[i*stride_col_dest+j*stride_row_dest]=source[i*stride_col_source+j*stride_row_source];
@@ -994,8 +994,8 @@ namespace opt{
 			}
 
 			//https://github.com/michael-lehn/ulmBLAS/blob/master/ulmblas/level3/syurk.tcc
-			template<class T, class F>
-			void syurk_explicit(F alpha, T A, int stride_row_a, int stride_col_a, F beta, T C, int stride_row_c, int stride_col_c, int m_max, int r_m_max, int q_m, int q_k, int r_m, int r_k, int offset) {
+			template<class TA,class TC, class F>
+			void syurk_explicit(F alpha, TA A, int stride_row_a, int stride_col_a, F beta, TC C, int stride_row_c, int stride_col_c, int m_max, int r_m_max, int q_m, int q_k, int r_m, int r_k, int offset) {
 				//	std::cout<<"explicit:"<<r_m_max<<"\n";
 				F* _A = new F[MC * MC]();
 				F* _B = new F[MC * MC]();
@@ -1053,8 +1053,8 @@ namespace opt{
 			}
 
 			//https://github.com/michael-lehn/ulmBLAS/blob/master/ulmblas/level3/syurk.tcc
-			template<class T, class F>
-			void syurk_single(int n, int k, F alpha, T A, int stride_row_a, int stride_col_a, F beta, T C, int stride_row_c, int stride_col_c) {
+			template<class TA, class TC, class F>
+			void syurk_single(int n, int k, F alpha, TA A, int stride_row_a, int stride_col_a, F beta, TC C, int stride_row_c, int stride_col_c) {
 				if (alpha == F(0.0) || k == 0) {
 					truscal(n, n, beta, C, stride_row_c, stride_col_c); //there are no matrix A, B to add to C with
 					return;
@@ -1097,8 +1097,8 @@ namespace opt{
 				delete[] _C;
 			}
 
-			export template<class T, class F>
-			void syurk(int n, int k, F alpha, T A, int stride_row_a, int stride_col_a, F beta, T C, int stride_row_c, int stride_col_c) {
+			export template<class TA, class TC, class F>
+			void syurk(int n, int k, F alpha, TA A, int stride_row_a, int stride_col_a, F beta, TC C, int stride_row_c, int stride_col_c) {
 				if (alpha == F(0.0) || k == 0) {
 					truscal(n, n, beta, C, stride_row_c, stride_col_c); //there are no matrix A, B to add to C with
 					return;
@@ -1148,8 +1148,8 @@ namespace opt{
 				}
 				int n_threads = std::thread::hardware_concurrency();
 				int rem = 0;
-				T Cs = C;
-				T As = A;
+				TC Cs = C;
+				TA As = A;
 
 				//chunkM is in reality chunkN
 				if (true) {
@@ -1176,13 +1176,13 @@ namespace opt{
 
 					for (int i = 0; i < n_threads - 1; i++) {
 						if (rem == 0) {
-							ts[i] = std::thread(syurk_explicit<T, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM, 0, q_m, q_k, r_m, r_k, panels_so_far); //there are no matrix A, B to multiply C with
+							ts[i] = std::thread(syurk_explicit<TA,TC, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM, 0, q_m, q_k, r_m, r_k, panels_so_far); //there are no matrix A, B to multiply C with
 							As += stride_col_a * chunkM;
 							Cs += stride_row_c * chunkM + stride_col_c * chunkM;
 							panels_so_far += chunkQM;
 						}
 						else {
-							ts[i] = std::thread(syurk_explicit<T, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM + 1, 0, q_m, q_k, r_m, r_k, panels_so_far); //there are no matrix A, B to multiply C with
+							ts[i] = std::thread(syurk_explicit<TA,TC, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM + 1, 0, q_m, q_k, r_m, r_k, panels_so_far); //there are no matrix A, B to multiply C with
 							As += stride_col_a * (chunkM + MC);
 							Cs += stride_row_c * (chunkM + MC) + stride_col_c * (chunkM + MC);
 							rem--;
@@ -1190,7 +1190,7 @@ namespace opt{
 						}
 
 					}
-					ts[n_threads - 1] = std::thread(syurk_explicit<T, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM, r_m, q_m, q_k, r_m, r_k, panels_so_far);
+					ts[n_threads - 1] = std::thread(syurk_explicit<TA,TC, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM, r_m, q_m, q_k, r_m, r_k, panels_so_far);
 
 					for (int i = 0; i < n_threads; i++) {
 						ts[i].join();
@@ -1300,8 +1300,8 @@ namespace opt{
 
 				}
 			}
-			template<class T, class F>
-			void sylrk_explicit(F alpha, T A, int stride_row_a, int stride_col_a, F beta, T C, int stride_row_c, int stride_col_c, int m_max, int r_m_max, int q_m, int q_k, int r_m, int r_k, int offset_blocks) {
+			template<class TA, class TC, class F>
+			void sylrk_explicit(F alpha, TA A, int stride_row_a, int stride_col_a, F beta, TC C, int stride_row_c, int stride_col_c, int m_max, int r_m_max, int q_m, int q_k, int r_m, int r_k, int offset_blocks) {
 				//	std::cout<<"explicit:"<<r_m_max<<"\n";
 				F* _A = new F[MC * MC]();
 				F* _B = new F[MC * MC]();
@@ -1341,8 +1341,8 @@ namespace opt{
 				delete[] _C;
 
 			}
-			template<class T, class F>
-			void sylrk_single(int n, int k, F alpha, T A, int stride_row_a, int stride_col_a, F beta, T C, int stride_row_c, int stride_col_c) {
+			template<class TA, class TC, class F>
+			void sylrk_single(int n, int k, F alpha, TA A, int stride_row_a, int stride_col_a, F beta, TC C, int stride_row_c, int stride_col_c) {
 
 				if (alpha == F(0.0) || k == 0) {
 					trlscal(n, n, beta, C, stride_row_c, stride_col_c); //there are no matrix A, B to add to C with
@@ -1390,8 +1390,8 @@ namespace opt{
 				delete[] _C;
 			}
 			
-			export template<class T, class F>
-			void sylrk(int n, int k, F alpha, T A, int stride_row_a, int stride_col_a, F beta, T C, int stride_row_c, int stride_col_c) {
+			export template<class TA, class TC, class F>
+			void sylrk(int n, int k, F alpha, TA A, int stride_row_a, int stride_col_a, F beta, TC C, int stride_row_c, int stride_col_c) {
 				if (alpha == F(0.0) || k == 0) {
 					trlscal(n, n, beta, C, stride_row_c, stride_col_c); //there are no matrix A, B to add to C with
 					return;
@@ -1443,8 +1443,8 @@ namespace opt{
 				}
 				int n_threads = std::thread::hardware_concurrency();
 				int rem = 0;
-				T Cs = C;
-				T As = A;
+				TC Cs = C;
+				TA As = A;
 
 				//chunkM is in reality chunkN
 				if (true) {
@@ -1471,20 +1471,20 @@ namespace opt{
 					for (int i = 0; i < n_threads - 1; i++) {
 						if (rem == 0) {
 							//F alpha, T A, int stride_row_a, int stride_col_a,F beta, T C, int stride_row_c, int stride_col_c, int m_max,int q_m, int q_k, int r_m, int r_k
-							ts[i] = std::thread(sylrk_explicit<T, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM, 0, q_m, q_k, r_m, r_k, panels_so_far); //there are no matrix A, B to multiply C with
+							ts[i] = std::thread(sylrk_explicit<TA,TC, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM, 0, q_m, q_k, r_m, r_k, panels_so_far); //there are no matrix A, B to multiply C with
 							Cs += stride_col_c * chunkM;
 							panels_so_far += chunkQM;
 						}
 						else {
 							//	std::cout<<"hier\n";
-							ts[i] = std::thread(sylrk_explicit<T, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM + 1, 0, q_m, q_k, r_m, r_k, panels_so_far); //there are no matrix A, B to multiply C with
+							ts[i] = std::thread(sylrk_explicit<TA,TC, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM + 1, 0, q_m, q_k, r_m, r_k, panels_so_far); //there are no matrix A, B to multiply C with
 							Cs += stride_col_c * (chunkM + MC);
 							rem--;
 							panels_so_far += chunkQM + 1;
 						}
 
 					}
-					ts[n_threads - 1] = std::thread(sylrk_explicit<T, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM, r_m, q_m, q_k, r_m, r_k, panels_so_far);
+					ts[n_threads - 1] = std::thread(sylrk_explicit<TA,TC, F>, alpha, As, stride_row_a, stride_col_a, beta, Cs, stride_row_c, stride_col_c, chunkQM, r_m, q_m, q_k, r_m, r_k, panels_so_far);
 
 
 					for (int i = 0; i < n_threads; i++) {
@@ -1561,8 +1561,8 @@ namespace opt{
 
 
 			//inverse of lowertriangular matrix L, i.e. calculates L^{-1}
-			template<class T, class F>
-			void lower_inv(int n, T A, int stride_row_a, int stride_col_a, T C, int stride_row_c, int stride_col_c) {
+			template<class TA, class TC, class F>
+			void lower_inv(int n, TA A, int stride_row_a, int stride_col_a, TC C, int stride_row_c, int stride_col_c) {
 				for (int i = 0; i < n; i++) {
 					for (int j = 0; j <= i; j++) {
 						if (j = i) {
@@ -1581,8 +1581,8 @@ namespace opt{
 			}
 
 			//inverse of D*L,whereas D is diagonal and L lower triangular
-			template<class T, class F>
-			void diag_lower_inv(int n, T A, int stride_row_a, int stride_col_a, T C, int stride_row_c, int stride_col_c) {
+			template<class TA, class TC, class F>
+			void diag_lower_inv(int n, TA A, int stride_row_a, int stride_col_a, TC C, int stride_row_c, int stride_col_c) {
 				for (int i=0;i<n;i++){
 					for (int j=0;j<=i;j++){
 						if (j==i){
@@ -1601,8 +1601,8 @@ namespace opt{
 			}
 			
 			//inverse of D*U,whereas D is diagonal and U upper triangular
-			template<class T, class F>
-			void diag_upper_inv(int n, T A, int stride_row_a, int stride_col_a, T C, int stride_row_c, int stride_col_c) {
+			template<class TA, class TC, class F>
+			void diag_upper_inv(int n, TA A, int stride_row_a, int stride_col_a, TC C, int stride_row_c, int stride_col_c) {
 				for (int i=n-1;i>=0;i--){
 					for (int j=n-1;j>=i;j--){
 						if (j==i){
@@ -1622,8 +1622,8 @@ namespace opt{
 
 			
 			//Calculates D*L, whereas D is diagonal and L is lower triangular.
-			template<class T,class F>
-			void dl_gemm_micro_kernel(int n, int k,T D, int stride_row_d, int stride_col_d, T A, int stride_row_a, int stride_col_a, T C, int stride_row_c, int stride_col_c){
+			template<class TD, class TA, class TC,class F>
+			void dl_gemm_micro_kernel(int n, int k,TD D, int stride_row_d, int stride_col_d, TA A, int stride_row_a, int stride_col_a, TC C, int stride_row_c, int stride_col_c){
 				
 				F* _D=new double[n];
 				
@@ -1641,8 +1641,8 @@ namespace opt{
 			}			
 
 			//Calculates L*D*y=b for=LDL^T
-			template<class T, class F>
-			void choi_forward_sub(int n, T A, int stride_row_a, int stride_col_a, T b, int  stride_b, F* y) {
+			template<class TA, class TB, class F>
+			void choi_forward_sub(int n, TA A, int stride_row_a, int stride_col_a, TB b, int  stride_b, F* y) {
 
 				for (int i = 0; i < n; i++) {
 					F sum = b[i];
@@ -1654,8 +1654,8 @@ namespace opt{
 				}
 			}
 
-			template<class T, class F>
-			void choi_backward_sub(int n, T A, int stride_row_a, int stride_col_a, F* y, T x, int stride_x) {
+			template<class TA, class TX, class F>
+			void choi_backward_sub(int n, TA A, int stride_row_a, int stride_col_a, F* y, TX x, int stride_x) {
 				for (int i = n - 1; i >= 0; i--) {
 					x[i * stride_x] += y[i];
 					for (int j = i - 1; j >= 0; j--) {
@@ -1664,14 +1664,14 @@ namespace opt{
 				}
 			}
 
-			export template<class T, class F>
-			void choi_solve(int n, T A, int stride_row_a, int stride_col_a, T b, int stride_b, T x, int stride_x) {
+			export template<class TA, class TB, class TX, class F>
+			void choi_solve(int n, TA A, int stride_row_a, int stride_col_a, TB b, int stride_b, TX x, int stride_x) {
 				for (int i = 0; i < n; i++) {
 					x[i * stride_x] = F(0.0);
 				}
 				F* y=new F[n];
-				choi_forward_sub<double*, double>(n, A, stride_row_a, stride_col_a, b, stride_b, y);
-				choi_backward_sub<double*,double>(n, A, stride_col_a, stride_row_a, y, x, stride_x);
+				choi_forward_sub<TA,TB,F>(n, A, stride_row_a, stride_col_a, b, stride_b, y);
+				choi_backward_sub<TA,TX,F>(n, A, stride_col_a, stride_row_a, y, x, stride_x);
 				delete y;
 			}
 			
@@ -1702,10 +1702,10 @@ namespace opt{
 				for (int i=0;i<q;i++){
 
 					choi_single<T,F>(d, A11, stride_row_a,stride_col_a);
-					diag_upper_inv<T,F>(d,A11,stride_col_a,stride_row_a,temp1,1,d);
+					diag_upper_inv<T,F*,F>(d,A11,stride_col_a,stride_row_a,temp1,1,d);
 					dcopy(n-d,d,A21,stride_row_a,stride_col_a,temp2,1,d);
 					gemm(n-d,d,d,F(1.0),temp2,1,d,temp1,1,d,0.0,A21,stride_row_a,stride_col_a); //A21*(D1*L11^T)=L21
-					dl_gemm_micro_kernel<T,F>(d,n-d,A11,stride_row_a, stride_col_a, A21, stride_col_a, stride_row_a,temp2,1,n-d);
+					dl_gemm_micro_kernel<T,T,F*,F>(d,n-d,A11,stride_row_a, stride_col_a, A21, stride_col_a, stride_row_a,temp2,1,n-d);
 					A11+=d*stride_row_a+d*stride_col_a;
 					gemm(n-d,n-d,d,F(-1.0),A21,stride_row_a,stride_col_a,temp2,1,n-d,F(1.0),A11,stride_row_a,stride_col_a);
 					A21=A11+d*stride_col_a;	
@@ -1715,10 +1715,10 @@ namespace opt{
 				if (rem){
 					d=rem;
 					choi_single<T,F>(d, A11, stride_row_a,stride_col_a);
-					diag_upper_inv<T,F>(d,A11,stride_col_a,stride_row_a,temp1,1,d);
+					diag_upper_inv<T,F*,F>(d,A11,stride_col_a,stride_row_a,temp1,1,d);
 					dcopy(n-d,d,A21,stride_row_a,stride_col_a,temp2,1,d);	
 					gemm(n-d,d,d,F(1.0),temp2,1,d,temp1,1,d,0.0,A21,stride_row_a,stride_col_a); //A21*(D1*L11^T)=L21
-					dl_gemm_micro_kernel<T,F>(d,n-d,A11,stride_row_a, stride_col_a, A21, stride_col_a, stride_row_a,temp2,1,n-d);
+					dl_gemm_micro_kernel<T,T,F*,F>(d,n-d,A11,stride_row_a, stride_col_a, A21, stride_col_a, stride_row_a,temp2,1,n-d);
 					A11+=d*stride_row_a+d*stride_col_a;
 					gemm(n-d,n-d,d,F(-1.0),A21,stride_row_a,stride_col_a,temp2,1,n-d,F(1.0),A11,stride_row_a,stride_col_a);				
 				}
