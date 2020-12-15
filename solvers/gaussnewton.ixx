@@ -341,17 +341,11 @@ namespace opt{
 				return result;
 			}
 			
-						//backtracking line search
+			//backtracking line search
 			bool bls(gfloat fnew, gfloat fcurrent, gfloat beta, typename T::iterator grad, typename T::iterator direction, int xdim){
 			
 				T fk(1,fcurrent);
-				std::cout<<"F current:"<<fcurrent<<"\n";
-				std::cout<<"d1:"<<direction[0]<<" d2:"<<direction[1]<<"\n";
-				std::cout<<"c1:"<<c1<<"beta"<<beta<<"\n";
-				std::cout<<"grad1:"<<grad[0]<<"grad2:"<<grad[1]<<"\n";
 				opt::math::cpu::dgmv(1,xdim,-c1*beta,direction,1,xdim,grad,1,gfloat(1.0),fk.begin(),1);	
-				std::cout<<"fnew:"<<fnew<<"f(xi)+gradf"<<fk[0]<<"\n";
-				std::cin.get();
 				if (fnew<=fk[0]){
 					return true;
 				}
@@ -387,9 +381,10 @@ namespace opt{
 				}
 				//Test is parameters already minimize f0 according to tol
 				T residuals(rdim*n_threads); //collection of residuals for each thread
+				typename T::iterator residual=residuals.begin();
 				int c_r=0; //current best residual
-				gfloat fmin=f0(x0.begin(),residuals.begin()+c_r); //current minimum
-				std::cout<<"Start newton"<<fmin<<"\n";
+				gfloat fmin=f0(x0.begin(),residual); //current minimum
+				//std::cout<<"Start newton"<<fmin<<"\n";
 				if (fmin<tol){
 					return {x0};
 				}
@@ -417,13 +412,16 @@ namespace opt{
 						for (int i=0;i<rdim;i++){
 							gfloat sum=0.0;
 							for (int j=0;j<xdim;j++){
-								grad[j]+=J[i*xdim+j]*gfloat(2.0)* residuals[i];
+								grad[j]+=J[i*xdim+j]*gfloat(2.0)* residual[i];
 							}
 						}
 						
+						for(int i=0;i<2;i++){
+							std::cout<<grad[i]<<"\t";
+						}
 						
 						opt::math::cpu::gemm(xdim,xdim,rdim,gfloat(1.0),J.begin(),xdim,1,J.begin(),1,xdim,gfloat(0.0),J_t_J.begin(),1,xdim); //calculate J^{T}*J
-						opt::math::cpu::dgmv(xdim,rdim,gfloat(1.0),J.begin(),xdim,1,residuals.begin()+c_r,1,gfloat(0.0),b.begin(),1); //calculate vector for J^{T}*J*v=b
+						opt::math::cpu::dgmv(xdim,rdim,gfloat(1.0),J.begin(),xdim,1,residual,1,gfloat(0.0),b.begin(),1); //calculate vector for J^{T}*J*v=b
 						opt::math::cpu::choi<typename T::iterator, gfloat>(xdim, J_t_J.begin(), 1, xdim); //calculate cholesky diagonal A=LDL^{T} decomposition
 						opt::math::cpu::choi_solve<typename T::iterator,typename T::iterator,typename T::iterator,gfloat>(xdim, J_t_J.begin(), 1, xdim, b.begin(), 1, v.begin(), 1);
 						gfloat beta=alpha;
@@ -451,8 +449,7 @@ namespace opt{
 						};
 						
 						do{
-							
-							
+
 							for (int i=0;i<n_threads;i++){
 								ts[i]=std::thread(eval,r,residuals.begin()+i*rdim,rdim,beta, v.begin(),xi.begin(), xdim, alpha,std::ref(f0_vals[i]));
 						
@@ -472,34 +469,27 @@ namespace opt{
 									min_index=i;
 								}
 							}
-							
-							std::cout<<"Current parameters\n";
-							for (int i=0;i<xdim;i++){
-								std::cout<<xi[i]<<"\n";
-							}
-							
+
 							//recover the stepsize factor that minimized f0 the most in this iteration, betaopt=alpha*lambda^{step_iter*n_threads+min_index}
 							gfloat betaopt=alpha;
 							for (int i=1;i<step_iter*n_threads+min_index;i++){
 								betaopt*=lambda;
 							}
 							
-							if (bls(curr_min, fmin, gfloat(1.0)/betaopt, grad.begin(), v.begin(),xdim)){
-								std::cin.get();
+							if (bls(curr_min, fmin, betaopt, grad.begin(), v.begin(),xdim)){
 								c_r=min_index*rdim;
+								residual=residuals.begin()+c_r;
 								fmin=curr_min;
-								std::cin.get();
 								
 								for (int i=0;i<rdim;i++){
 									xi[i]=gfloat(-1.0)*betaopt*v[i]+xi[i]; //get new parameters
 								}
-								
+								/*
 								std::cout<<"Best parameters\n";
 								for (int i=0;i<xdim;i++){
 									std::cout<<xi[i]<<"\n";
-								}
-								
-							//	std::cout<<"Current error: "<<fmin<<"\n";
+								}*/
+
 								step_size_found=true;
 							}
 							step_iter++;
@@ -510,9 +500,9 @@ namespace opt{
 						if (!step_size_found){
 							return {};
 						}
-						
+						//std::cout<<"fmin:"<<fmin<<"\n";
 						if (fmin<=tol){
-						std::cout<<"fmin:"<<fmin<<"tol:"<<tol<<"\n";
+							//std::cout<<"true\n";
 							run_finished=true;
 							return {xi};
 						}

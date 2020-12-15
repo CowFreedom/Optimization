@@ -240,9 +240,9 @@ namespace opt{
 			
 			export bool gauss_newton_example3(std::ostream& os, CorrectnessTest& v){
 				std::vector<double> x0={-0.3,-0.3};
-				int tol=1e-10;
-				int x1=0;
-				int x2=0;
+				double tol=1e-10;
+				double x1=5;
+				double x2=-90;
 				CircleB<std::vector<double>::const_iterator, std::vector<double>::iterator> c(x1,x2);
 				using std::placeholders::_1;
 				using std::placeholders::_2;
@@ -255,7 +255,8 @@ namespace opt{
 				auto result=gns.run(x0);
 				
 				if (result){
-					double sum=((*result)[0]+x1)*((*result)[0]+x1)+((*result)[1]+x2)*((*result)[1]+x2);
+					double sum=((*result)[0]-x1)*((*result)[0]-x1)+((*result)[1]-x2)*((*result)[1]-x2);
+					std::cout<<"Endsum:"<<(*result)[0]<<" and"<<(*result)[1]<<"\n";
 					if(sum>tol){
 							return false;						
 					}
