@@ -59,10 +59,10 @@ bool run_correctness_tests(std::ostream& os, bool save_metrics){
 //	v.push_back(opt::test::CorrectnessTest("gemm dim(A)=(1000,1000), dim(B)=(1000,1000)",opt::test::corr::matrix_multiplication_2));
 //	v.push_back(opt::test::CorrectnessTest("gemm dim(A)=(425,17), dim(B)=(17,31)",opt::test::corr::matrix_multiplication_3));
 
-	/*v.push_back(opt::test::CorrectnessTest("syurk",opt::test::corr::matrix_multiplication_4));
-	v.push_back(opt::test::CorrectnessTest("sylrk", opt::test::corr::matrix_multiplication_5));
+	//v.push_back(opt::test::CorrectnessTest("syurk",opt::test::corr::matrix_multiplication_4));
+	//v.push_back(opt::test::CorrectnessTest("sylrk", opt::test::corr::matrix_multiplication_5));
 	v.push_back(opt::test::CorrectnessTest("cholseky LDL dim(A)=(3,3)",opt::test::corr::cholesky_1));
-	*/
+	
 	v.push_back(opt::test::CorrectnessTest("cholseky LDL various dimensions)",opt::test::corr::cholesky_2));
 	
 	v.push_back(opt::test::CorrectnessTest("cholseky solve various dimensions)",opt::test::corr::cholesky_solve));
@@ -104,7 +104,7 @@ bool run_tests(std::ostream& os,bool save_stats){
 int main(){
 	bool save_stats=true; //save test logs to file
 	bool test_result=run_tests(std::cout,save_stats);
-		
+		//std::cin.get();
 	if (test_result){
 		std::cout<<"Tests finished without errors\n";
 		return 1;

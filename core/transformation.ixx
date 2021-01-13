@@ -1509,7 +1509,7 @@ namespace opt{
 				F* D=new F[n]();
 				for (int j=0;j<n;j++){
 					for (int i=0;i<j;i++){
-						D[j]-=A[j*stride_col+i]*A[j*stride_col+i]*D[i];
+						D[j]-=A[j*stride_col+i*stride_row]*A[j*stride_col+i*stride_row]*D[i];
 					}
 					A[j*stride_col+j*stride_row]+=D[j];
 					D[j]=A[j*stride_col+j*stride_row];
@@ -1580,7 +1580,7 @@ namespace opt{
 				}
 			}
 
-			//inverse of D*L,whereas D is diagonal and L lower triangular
+			//inverse of A=D*L,whereas D is diagonal and L lower triangular
 			template<class TA, class TC, class F>
 			void diag_lower_inv(int n, TA A, int stride_row_a, int stride_col_a, TC C, int stride_row_c, int stride_col_c) {
 				for (int i=0;i<n;i++){
@@ -1598,27 +1598,7 @@ namespace opt{
 						}
 					}
 				}
-			}
-			
-			//inverse of D*U,whereas D is diagonal and U upper triangular
-			template<class TA, class TC, class F>
-			void diag_upper_inv(int n, TA A, int stride_row_a, int stride_col_a, TC C, int stride_row_c, int stride_col_c) {
-				for (int i=n-1;i>=0;i--){
-					for (int j=n-1;j>=i;j--){
-						if (j==i){
-						
-							C[i*stride_col_c+i*stride_row_c]=F(1.0)/A[i*stride_col_a+i*stride_row_a];
-						}
-						else{
-							F sum=0.0;
-							for (int k=j;k>=i+1;k--){
-								sum-=A[i*stride_col_a+k*stride_row_a]*C[k*stride_col_c+j*stride_row_c];
-							}
-							C[i*stride_col_c+j*stride_row_c]=sum;
-						}
-					}
-				}
-			}			
+			}		
 
 			
 			//Calculates D*L, whereas D is diagonal and L is lower triangular.
@@ -1645,7 +1625,7 @@ namespace opt{
 			void choi_forward_sub(int n, TA A, int stride_row_a, int stride_col_a, TB b, int  stride_b, F* y) {
 
 				for (int i = 0; i < n; i++) {
-					F sum = b[i];
+					F sum = b[i*stride_b];
 					for (int j = 0; j < i; j++) {
 						sum -= A[i * stride_col_a + j * stride_row_a] * A[j * stride_col_a + j * stride_row_a] * y[j];
 					}
@@ -1653,6 +1633,33 @@ namespace opt{
 					y[i] = sum;
 				}
 			}
+			
+			
+			/*Calculates L*D*Y=B for=LDL^T and matrices Y,B. The matrix A=L*D is already in packed storage. The following is assumed:
+			* the diagonal of L consists of ones
+			* D and L are stored in a single matrix A
+			* the diagonal of L is implicitly assumed and replaced by the diagonal of D, ergo A[i][i] indicates D[i][i].
+			*/
+			template<class TA, class TB, class TY,class F>
+			void choi_forward_sub(int n, int m, TA A, int stride_row_a, int stride_col_a, TB B, int  stride_row_b, int stride_col_b, TY Y, int stride_row_y, int stride_col_y) {
+				F* y=&Y[0];
+				F* b=&B[0];
+				for (int a=0;a<m;a++){
+					for (int i = 0; i < n; i++) {
+						F sum = b[i*stride_col_b];
+						
+						for (int j = 0; j < i; j++) {
+							
+							sum -= A[i * stride_col_a + j * stride_row_a] * A[j * stride_col_a + j * stride_row_a] * y[j*stride_col_y];
+							
+						}
+						sum /= A[i * stride_col_a + i * stride_row_a];
+						y[i*stride_col_y] = sum;
+					}
+					y+=stride_row_y;
+					b+=stride_row_b;
+				}
+			}		
 
 			template<class TA, class TX, class F>
 			void choi_backward_sub(int n, TA A, int stride_row_a, int stride_col_a, F* y, TX x, int stride_x) {
@@ -1702,9 +1709,15 @@ namespace opt{
 				for (int i=0;i<q;i++){
 
 					choi_single<T,F>(d, A11, stride_row_a,stride_col_a);
-					diag_upper_inv<T,F*,F>(d,A11,stride_col_a,stride_row_a,temp1,1,d);
-					dcopy(n-d,d,A21,stride_row_a,stride_col_a,temp2,1,d);
-					gemm(n-d,d,d,F(1.0),temp2,1,d,temp1,1,d,0.0,A21,stride_row_a,stride_col_a); //A21*(D1*L11^T)=L21
+					//diag_upper_inv_p<T,F*,F>(d,A11,stride_col_a,stride_row_a,temp1,1,d);
+					//choi_forward_sub<T,T,F>(d, A11, stride_row_a, stride_col_a, b, stride_b, y);
+					
+					/*Instead of calculating A21*(D1*L11^T)^-1=L21 we are solving A21^T=L11*D1*X with X=L21
+					*/
+					dcopy(n-d,d,A21,stride_row_a,stride_col_a,temp2,n-d,1);
+					choi_forward_sub<T,F*,T,F>(d, n-d, A11, stride_row_a, stride_col_a,temp2, 1, n-d, A21, stride_col_a, stride_row_a);
+				
+					//Now calculate L22
 					dl_gemm_micro_kernel<T,T,F*,F>(d,n-d,A11,stride_row_a, stride_col_a, A21, stride_col_a, stride_row_a,temp2,1,n-d);
 					A11+=d*stride_row_a+d*stride_col_a;
 					gemm(n-d,n-d,d,F(-1.0),A21,stride_row_a,stride_col_a,temp2,1,n-d,F(1.0),A11,stride_row_a,stride_col_a);
@@ -1715,9 +1728,9 @@ namespace opt{
 				if (rem){
 					d=rem;
 					choi_single<T,F>(d, A11, stride_row_a,stride_col_a);
-					diag_upper_inv<T,F*,F>(d,A11,stride_col_a,stride_row_a,temp1,1,d);
-					dcopy(n-d,d,A21,stride_row_a,stride_col_a,temp2,1,d);	
-					gemm(n-d,d,d,F(1.0),temp2,1,d,temp1,1,d,0.0,A21,stride_row_a,stride_col_a); //A21*(D1*L11^T)=L21
+					dcopy(n-d,d,A21,stride_row_a,stride_col_a,temp2,d,1);
+					choi_forward_sub<T,F*,T,F>(d, n-d, A11, stride_row_a, stride_col_a,temp2, 1, n-d, A21, stride_col_a, stride_row_a);
+					
 					dl_gemm_micro_kernel<T,T,F*,F>(d,n-d,A11,stride_row_a, stride_col_a, A21, stride_col_a, stride_row_a,temp2,1,n-d);
 					A11+=d*stride_row_a+d*stride_col_a;
 					gemm(n-d,n-d,d,F(-1.0),A21,stride_row_a,stride_col_a,temp2,1,n-d,F(1.0),A11,stride_row_a,stride_col_a);				
