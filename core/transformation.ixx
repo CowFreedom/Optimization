@@ -1740,6 +1740,66 @@ namespace opt{
 				delete[] temp2;
 				
 			}
+			
+			/*LU factorization of A=LU. Stores in values in place, i.e. overwrites A. Assumes that L has ones on the diagonal and U not necessarily*/
+			export template<class T,class F>
+			void lu_single(int n, T A, int stride_row, int stride_col){
+				for (int i=0;i<n;i++){
+					for (int j=i+1;j<n;j++){
+						float factor=-A[j*stride_col+i*stride_row]/A[i*stride_col+i*stride_row];
+						for (int k=i+1;k<n;k++){
+							A[j*stride_col+k*stride_row]=A[j*stride_col+k*stride_row]+A[i*stride_col+k*stride_row]*factor;
+						}
+						A[j*stride_col+i*stride_row]=-factor;
+					}
+				}	
+			}
+
+			//Solves LX=A, whereas L is a lower triangular matrix and X an unknown Matrix. It is assumed that L is stored inside A=LU with ones on the diagonal			
+			export template<class TL, class TA, class TX,class F>
+			void lu_solve_lower_single(int n, int m, TL L, int stride_row_l,int stride_col_l, TA A, int stride_row_a, int stride_col_a, TX X, int stride_row_x, int stride_col_x){
+				for (int a=0;a<m;a++){
+					int bpx=a*stride_row_x;
+					int bpa=a*stride_row_a;
+					for (int i=0;i<n;i++){
+						float sum=A[bpa+i*stride_col_a];
+						for (int j=0;j<i;j++){
+							sum-=L[i*stride_col_l+j*stride_row_l]*X[bpx+j*stride_col_x];
+						}
+						X[bpx+i*stride_col_x]=sum;
+					}							
+				}
+
+			}
+
+			//Solves UX=A, whereas U is a upprt triangular matrix coming from lu factorization and X an unknown Matrix
+			export template<class TU, class TA, class TX,class F>
+			void lu_solve_upper_single(int n, int m,TU U, int stride_row_u,int stride_col_u, TA A, int stride_row_a, int stride_col_a, TX X, int stride_row_x, int stride_col_x){
+				for (int a=0;a<m;a++){
+					int bpx=a*stride_row_x;
+					int bpa=a*stride_row_a;
+					for (int i=n-1;i>=0;i--){
+						float sum=A[bpa+i*stride_col_a];
+						
+						for (int j=n-1;j>i;j--){
+							sum-=U[i*stride_col_u+j*stride_row_u]*X[bpx+j*stride_col_x];
+							
+						}
+						sum/=U[i*stride_col_u+i*stride_row_u];
+						X[bpx+i*stride_col_x]=sum;
+					}
+				}
+			}
+
+			//TODO This function should be optimized to work in a parallel manner
+			//Solves L*U*X=B, whereas L*U=A with L having implicit ones on the diagonal
+			export template<class TA, class TB, class TX,class F>
+			void lu_solve(int n, int m, TA A, int stride_row_a, int stride_col_a, TB B, int stride_row_b, int stride_col_b, TX X, int stride_row_x, int stride_col_x){
+				F* Y=new F[n*m]();
+				lu_solve_lower_single<TA,TB,F*,F>(n,m,A,stride_row_a,stride_col_a,B,stride_row_b,stride_col_b,Y,1,m);
+				lu_solve_upper_single<TA,F*,TX,F>(n,m,A,stride_row_a,stride_col_a,Y,1,m,X,stride_row_x,stride_col_x);
+				delete[] Y;
+			}			
 		
 		}
 	}

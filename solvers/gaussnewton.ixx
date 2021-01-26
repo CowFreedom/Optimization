@@ -5,6 +5,7 @@ module;
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <iomanip> //std setprecision
 export module optimization.solvers:gaussnewton;
 
 import optimization.transformation;
@@ -32,6 +33,13 @@ namespace opt{
 				No
 			};
 			
+			export enum class GNSError{
+				Success,
+				Numerical,
+				InputError,
+				NoStepSizeFound,
+				NoConvergence
+			};
 			
 				/*
 			template<class T>
@@ -65,258 +73,47 @@ namespace opt{
 			}			
 
 */			
+	
+			
+			//l1 vector norm tolerance
+			export template<class T,class F>
+			bool abs_tol(int dim, T x, int stride_x, F tol){
+				for (int i=0;i<dim;i++){
+					float val=(x[i*stride_x]>=0.0)?x[i*stride_x]:-x[i*stride_x];
+					if (val>tol){
+						return false;
+					}
+				}
+				return true;
+			}
+			
+			export template<class T, class F>
+			bool check_diagonal_has_zero(int n,T A, int stride_row, int stride_col){
+				for (int i=0;i<n;i++){
+					F val=A[i*stride_row+i*stride_col];
+
+					if (val==0){
+						return true;
+					}
+				}
+				return false;
+			}
+			
+			export template<class T, class F>
+			void perturb_diagonal(int n,T A, int stride_row, int stride_col,F eps){
+				for (int i=0;i<n;i++){
+					A[i*stride_row+i*stride_col]+=eps;				
+				}
+			}
 		}
 	
-		export template<ValidContainer T,class U,gns::HasJacInv F>
+		export template<ValidContainer T,class U>
 		class GNSCPU{
-				GNSCPU(U _r,U _j_t, U _j_t_j_inv,int _xdim, std::ostream& _os){
-			
-			}
 		};
 
+	
 		export template<ValidContainer T,class U>
-		class GNSCPU<T,U,gns::HasJacInv::Yes> {
-		
-			using gfloat=typename T::value_type;
-			
-			private:
-			U r;
-			U j_t;
-			U j_t_j_inv;
-			int rdim;
-			gfloat lambda=0.5; //determines, how much the step size is reduced at each iteration of the wolfe conditions
-			gfloat tol=0.001;
-			int n_threads=1;
-			int max_step_iter=60/n_threads; //maximum number of iterations during the stepsize finding process
-			int max_iter=300; //maximum number of iterations
-			gfloat c1=0.5;
-			
-			gfloat f0(typename T::const_iterator params,typename T::iterator residuals){
-			
-				T result(1);
-				r(params,residuals);	
-				opt::math::cpu::gemm(1,1,rdim,gfloat(1.0),residuals,1,rdim,residuals,1,1,gfloat(0.0),result.begin(),1,1);
-				
-				return *(result.begin());
-			}
-			
-			void gemm_and_residual(size_t xdim ,gfloat beta,typename T::iterator A, typename T::iterator x_source, typename T::iterator x_dest, typename T::iterator res, gfloat& f0_res){
-					T residual(rdim);
-				std::copy(x_source,x_source+xdim,x_dest);
-					
-							/*
-					
-					
-						os<<"x_dest davor\n";
-						for (int i=0;i<d;i++){
-							os<<*(x_dest+i)<<"\t";
-						}
-					os<<"\n";
-				
-					os<<"r_i\n";
-						for (int i=0;i<d;i++){
-							os<<*(residual.begin()+i)<<"\t";
-						}
-					os<<"\n";
-					
-					os<<"M:\n";
-					
-					for (int i=0;i<d;i++){
-						for (int j=0;j<d;j++){
-							os<<A[i*d+j]<<"t";
-						}
-						os<<"\n";
-					
-					}
-					
-				
-				
-					*/
-					
-					
-					opt::math::cpu::gemm(xdim,1,rdim,-beta,A,1,rdim,res,1,1,gfloat(1.0),x_dest,1,1);	
-					f0_res=f0(x_dest,residual.begin());		
-					
-				
-				/*
-				
-					
-					os<<"r_i+beta*(J_T_J)^-1*J_T*r_i\n";
-						for (int i=0;i<d;i++){
-							os<<*(x_dest+i)<<"\t";
-						}
-					os<<"\n";
-						std::cin.get();					
-					*/
-			}
-			
-			std::ostream& os;
-			
-			//backtracking line search
-			bool bls(gfloat fnew, gfloat fmin, gfloat beta, typename T::iterator grad, typename T::iterator xb,typename T::iterator xe,typename T::iterator xpb, int xdim){
-		//	std::cout<<"BLS: beta: "<<beta<<"\n";
-				T direction(xdim);
-				std::transform(xb,xe,xpb, direction.begin(),std::minus<double>()); //not numerically stable but faster than doing the matrix calculations again
-			/*			
-				std::cout<<"xb:\n";
-				for (int i=0;i<xdim;i++){
-				std::cout<<*(xb+i)<<"\t";
-				}
-				
-				std::cout<<"\nxp:\n";
-				for (int i=0;i<xdim;i++){
-				std::cout<<*(xpb+i)<<"\t";
-				}
-				
-				std::cout<<"\n grad:\n";
-				for (int i=0;i<xdim;i++){
-				std::cout<<*(grad+i)<<"\t";
-				}*/			
-				
-				T fk(1,fmin);
-				opt::math::cpu::gemm(1,1,xdim,c1,direction.begin(),1,xdim,grad,1,1,gfloat(1.0),fk.begin(),1,1);	
-				//std::cout<<"f new: "<<fnew <<" f(xk)"<<*(fk.begin())<<"\n";
-				if (fnew<=*(fk.begin())){
-					return true;
-				}
-				else{
-					return false;
-				}
-			}
-			
-			public:
-			
-			GNSCPU(U _r,U _j_t, U _j_t_j_inv,int _rdim, std::ostream& _os): r(_r), j_t(_j_t), j_t_j_inv(_j_t_j_inv),rdim(_rdim),os(_os){
-				//os<<"Hat alles geklappt, alter\n";
-			}
-			
-			
-			/*! Runs Gauss Newton's algorithm. Only this function has to be called to run the complete procedure.
-			@param[in] initial_params Initial parameters containing starting values for the procedure.
-			\return Code indicating success or failure of running the Gauss-Newton procedure.
-			*/
-			std::optional<T> run(T x0){
-				
-				bool run_finished=false;
-				int xdim=x0.size();
-				//Test is parameters already minimize f0 according to tol
-				T residuals(rdim);
-				gfloat fmin=f0(x0.begin(),residuals.begin()); //current minimum
-				
-				if (fmin<tol){
-					return {x0};
-				}
-				else{
-					T J_t(xdim*rdim);
-					T grad(xdim);
-					T J_t_J_inv(xdim*xdim);
-
-					T C(xdim*rdim);
-					T xi(x0.begin(),x0.end());
-					T xs(xdim*n_threads);
-					gfloat alpha=0.7;		
-					int iter=0;
-					
-					std::vector<std::thread> ts(n_threads);
-					gfloat curr_min;
-					
-					while (run_finished==false && (iter<max_iter)){
-						j_t(xi.begin(),J_t.begin());
-						j_t_j_inv(xi.begin(),J_t_J_inv.begin());
-					
-						opt::math::cpu::gemm(xdim,rdim,xdim,gfloat(1.0),J_t_J_inv.begin(),1,xdim,J_t.begin(),1,rdim,gfloat(0.0),C.begin(),1,rdim);
-						
-						/*Calculate gradient from indices of jacobi matrix. Used for backtracking stepsize finding later*/
-						for (int i=0;i<xdim;i++){
-							gfloat sum=0;
-							for (int j=0;j<rdim;j++){
-								
-								sum+=*(J_t.begin()+j+i*rdim)*gfloat(2.0)* *(residuals.begin()+j);
-							}
-							*(grad.begin()+i)=sum;
-						}
-			//			std::cout<<"current x:\n";
-						
-						gfloat beta=alpha;
-						
-						std::vector<gfloat> f0_vals(n_threads);
-						std::vector<gfloat> betas(n_threads);
-						int step_iter=0;
-						bool step_size_found=false;
-						
-								
-						while(!step_size_found && step_iter<=max_step_iter){
-						step_iter++;
-							
-							for (int i=0;i<n_threads;i++){
-						//	std::cout<<"beta:"<<beta<<"lambda:"<<lambda<<"\t \t";
-								ts[i]=std::thread(&GNSCPU::gemm_and_residual,this,xdim,beta,C.begin(),xi.begin(),xs.begin()+i*xdim,residuals.begin(),std::ref(f0_vals[i]));
-								betas[i]=beta;
-								beta*=lambda;
-								
-							}
-							
-							/*
-							os<<"(J_T_J)^-1\n";
-							
-							for (int i=0;i<d;i++){
-								for (int k=0; k<d;k++){
-									os<<*(J_t_J_inv.begin()+d*i+k)<<"\t";
-								
-								}
-								os<<"\n";
-							}
-						
-						*/
-						
-							for (auto& t: ts){
-								t.join();
-							}
-					
-							//Find step size that minimizes f0 the most						
-							curr_min=f0_vals[0];
-							int min_index=0;
-							for (int i=1;i<n_threads;i++){
-								if (f0_vals[i]<curr_min){
-									curr_min=f0_vals[i];
-									min_index=i;
-								}
-							}		
-						//	std::cout<<"curr_min:"<<curr_min<<" fmin:"<<fmin<<"\n";
-						//	std::cout<<"min index:"<<min_index<<"\n";
-				
-							if (bls(curr_min,fmin,betas[min_index],grad.begin(),xs.begin()+min_index,xs.begin()+min_index+xdim,xi.begin(),xdim)){
-								fmin=curr_min;
-								std::copy(xs.begin()+min_index,xs.begin()+min_index+xdim,xi.begin());
-								r(xi.begin(),residuals.begin());
-							//	std::cout<<"Current error: "<<fmin<<"\n";
-								step_size_found=true;
-							}
-										
-						}
-														
-						if (!step_size_found){
-							return {};
-						}
-						
-						if (fmin<=tol){
-							run_finished=true;
-							return {xi};
-						}
-				
-						iter++;
-
-					}
-					
-				}
-				return {};
-				
-			}
-
-		};
-		
-		export template<ValidContainer T,class U>
-		class GNSCPU<T,U,gns::HasJacInv::No> {
+		class GNSCPU<T,U> {
 			
 			using gfloat=typename T::value_type;
 			
@@ -326,8 +123,9 @@ namespace opt{
 			U j_inv; //represents scheme to calculate jacobian inverse, like finite differences 
 			int rdim;
 			int xdim;
-
-			std::ostream& os;
+			bool (&xtol)(int,typename T::iterator, int, gfloat)=gns::abs_tol<typename T::iterator,gfloat>;
+			std::streambuf* buf;
+			std::ostream os;
 			
 			//Evaluates sum of squares objective function f0
 			gfloat f0(typename T::const_iterator params,typename T::iterator residuals){
@@ -341,12 +139,22 @@ namespace opt{
 				return result;
 			}
 			
+			bool has_nans_or_infs(int dim,typename T::iterator x, int stride){
+				for (int i=0;i<dim;i++){
+					if (std::isnan(x[i*stride])||std::isinf(x[i*stride])){
+						return true;
+					}
+				}
+				return false;		
+			}
+			
 			//backtracking line search
 			bool bls(gfloat fnew, gfloat fcurrent, gfloat beta, typename T::iterator grad, typename T::iterator direction, int xdim){
 			
 				T fk(1,fcurrent);
 				opt::math::cpu::dgmv(1,xdim,-c1*beta,direction,1,xdim,grad,1,gfloat(1.0),fk.begin(),1);	
-				if (fnew<=fk[0]){
+				//std::cout<<std::setprecision(17)<<"fnew: "<<fnew<<"fcurrent:"<<fcurrent<<"\n";
+				if (fnew<fk[0]){
 					return true;
 				}
 				else{
@@ -358,162 +166,243 @@ namespace opt{
 			public:
 			gfloat lambda=0.5; //determines, how much the step size is reduced at each iteration of the wolfe conditions
 			int n_threads=std::thread::hardware_concurrency();
-			int max_step_iter=60/n_threads; //maximum number of iterations during the stepsize finding process
+			int max_step_iter=600/n_threads; //maximum number of iterations during the stepsize finding process
 			int max_iter=300; //maximum number of iterations
-			gfloat c1=0.5;
-			gfloat alpha=0.7;	//decrease factor in the newton stepsize iterations	
-			gfloat tol=0.001;
+			int step_nthreads=(60>n_threads)?n_threads:60;
+			gfloat c1=0.0001;
+			gfloat alpha=0.8;	//decrease factor in the newton stepsize iterations	
+			gfloat tol=0.0001;
+			gfloat lu_pertubation=5; //If LDL and LU decompositions fail, the approximated hessian J^{T}*J is perturbed along the diagonal by this factor
 			
-			GNSCPU(U _r,U _j,int _xdim, int _rdim, std::ostream& _os): r(_r), j(_j),rdim(_rdim),xdim(_xdim),os(_os){
+			GNSCPU(U _r,U _j,int _xdim, int _rdim, std::streambuf* _buf): r(_r), j(_j),rdim(_rdim),xdim(_xdim),buf(_buf),os(_buf){
 				
-			}		
+			}	
+			GNSCPU(U _r,U _j,int _xdim, int _rdim): r(_r), j(_j),rdim(_rdim),xdim(_xdim),buf(nullptr),os(nullptr){
+				
+			}				
 			
 			/*! Runs Gauss Newton's algorithm. Only this function has to be called to run the complete procedure.
 			@param[in] initial_params Initial parameters containing starting values for the procedure.
 			\return Code indicating success or failure of running the Gauss-Newton procedure.
 			*/
-			std::optional<T> run(T x0){
-				
-				bool run_finished=false;
+			std::optional<T> run(T x0, gns::GNSError* gns_error=nullptr){
+	
 				if (x0.size()<xdim){
 					os<<"Size of the input container does not fit the dimension of the problem";
+					if(gns_error){
+						*gns_error=gns::GNSError::InputError;
+					}
 					return {};
 				}
 				//Test is parameters already minimize f0 according to tol
 				T residuals(rdim*n_threads); //collection of residuals for each thread
 				typename T::iterator residual=residuals.begin();
 				int c_r=0; //current best residual
-				gfloat fmin=f0(x0.begin(),residual); //current minimum
-				//std::cout<<"Start newton"<<fmin<<"\n";
-				if (fmin<tol){
-					return {x0};
-				}
-				else{
-					T J(xdim*rdim);
-					T grad(xdim);
-					T b(xdim); //output vector in J^{T}*J*v=b
-					T v(xdim);//unknown vector in J^{T}*J*v=b
-					T J_t_J(xdim*xdim);
-					T xi(x0.begin(),x0.end()); //current parameters
-					int iter=0;
+				gfloat fmin=f0(x0.begin(),residuals.begin()); //current minimum
+				T J(xdim*rdim);
+				T grad(xdim);
+				T b(xdim); //output vector in J^{T}*J*v=b
+				T v(xdim);//unknown vector in J^{T}*J*v=b
+				T J_t_J(xdim*xdim);
+				T xi(x0.begin(),x0.end()); //current parameters
+				int iter=0;
+				
+				std::vector<std::thread> ts(n_threads);
+				gfloat curr_min;
+				
+				bool* result_valid=new bool[step_nthreads]();	
+				std::vector<gfloat> f0_vals(n_threads);
+				std::vector<gfloat> betas(n_threads);				
+				do{
 					
-					std::vector<std::thread> ts(n_threads);
-					gfloat curr_min;
+					j(xi.begin(),J.begin()); //get current value of Jacobian
+										
+					/*Calculate gradient from indices of jacobi matrix. Used for backtracking stepsize finding later*/
+					//used for sum calculation. not necessary but probably faster due cache misses in the traversal of array
+					for(int i=0;i<xdim;i++){
+						grad[i]=0.0;
+					}
 					
-					do{
+					gfloat all_zeros=0.0;
 					
-						j(xi.begin(),J.begin()); //get current value of Jacobian
-						
-						/*Calculate gradient from indices of jacobi matrix. Used for backtracking stepsize finding later*/
-						//used for sum calculation. not necessary but probably faster due cache misses in the traversal of array
-						for(int i=0;i<xdim;i++){
-							grad[i]=0.0;
+					for (int i=0;i<rdim;i++){
+						for (int j=0;j<xdim;j++){
+							grad[j]+=J[i*xdim+j]*gfloat(2.0)* residual[i];
+							all_zeros+=grad[j];
 						}
-						for (int i=0;i<rdim;i++){
-							gfloat sum=0.0;
-							for (int j=0;j<xdim;j++){
-								grad[j]+=J[i*xdim+j]*gfloat(2.0)* residual[i];
-							}
+					}
+					if (all_zeros==0.0){
+						if (gns_error){
+							*gns_error=gns::GNSError::Success;
 						}
-						
-						for(int i=0;i<2;i++){
-							std::cout<<grad[i]<<"\t";
-						}
-						
-						opt::math::cpu::gemm(xdim,xdim,rdim,gfloat(1.0),J.begin(),xdim,1,J.begin(),1,xdim,gfloat(0.0),J_t_J.begin(),1,xdim); //calculate J^{T}*J
-						opt::math::cpu::dgmv(xdim,rdim,gfloat(1.0),J.begin(),xdim,1,residual,1,gfloat(0.0),b.begin(),1); //calculate vector for J^{T}*J*v=b
-						opt::math::cpu::choi<typename T::iterator, gfloat>(xdim, J_t_J.begin(), 1, xdim); //calculate cholesky diagonal A=LDL^{T} decomposition
+						delete[] result_valid;
+						return{xi};
+					}
+				
+					
+					opt::math::cpu::gemm(xdim,xdim,rdim,gfloat(1.0),J.begin(),xdim,1,J.begin(),1,xdim,gfloat(0.0),J_t_J.begin(),1,xdim); //calculate J^{T}*J
+					opt::math::cpu::dgmv(xdim,rdim,gfloat(1.0),J.begin(),xdim,1,residual,1,gfloat(0.0),b.begin(),1); //calculate vector for J^{T}*J*v=b
+					opt::math::cpu::choi<typename T::iterator, gfloat>(xdim, J_t_J.begin(), 1, xdim); //calculate cholesky diagonal A=LDL^{T} decomposition				
+					bool diagonal_has_zero=gns::check_diagonal_has_zero<T::iterator,gfloat>(xdim,J_t_J.begin(),1,xdim);
+					
+					if(!diagonal_has_zero){
 						opt::math::cpu::choi_solve<typename T::iterator,typename T::iterator,typename T::iterator,gfloat>(xdim, J_t_J.begin(), 1, xdim, b.begin(), 1, v.begin(), 1);
-						gfloat beta=alpha;
 						
-						std::vector<gfloat> f0_vals(n_threads);
-						std::vector<gfloat> betas(n_threads);
-						int step_iter=0;
-						bool step_size_found=false;
+					}
+					else{
+						//Using LU decomposition
+						if(buf){
+							os<<"In the calculation of the descent direction LU decomposition was used instead of LDL^{T}. This was due a zero on the diagonal in the LDL^{T} decomposition\n";
+						}
 						
-						//maybe take U by reference
-						auto eval=[](U r, typename T::iterator residual, int rdim, gfloat beta, typename T::iterator v, typename T::iterator xi, int xdim, gfloat alpha, gfloat& f0_val){
-							T _x(xdim); //new parameters
-							
-							for (int i=0;i<rdim;i++){
-								_x[i]=gfloat(-1.0)*beta*v[i]+xi[i]; //get new parameters
+						//Recreate the initial state of J_t_J_d;
+						opt::math::cpu::gemm(xdim,xdim,rdim,gfloat(1.0),J.begin(),xdim,1,J.begin(),1,xdim,gfloat(0.0),J_t_J.begin(),1,xdim); //calculate J^{T}*J
+						opt::math::cpu::lu_single<typename T::iterator, gfloat>(xdim,J_t_J.begin(),1,xdim);
+						diagonal_has_zero=gns::check_diagonal_has_zero<T::iterator,gfloat>(xdim,J_t_J.begin(),1,xdim);
+						
+						/*If matrix still singular, slightly perturb diagonal and redo LU decomposition*/
+						if (diagonal_has_zero){
+							if(buf){
+								os<<"Diagonal still zero after LU decomposition. Perturbing the diagonal of approximated Hessian and redoing decomposition.\n";
 							}
+							opt::math::cpu::gemm(xdim,xdim,rdim,gfloat(1.0),J.begin(),xdim,1,J.begin(),1,xdim,gfloat(0.0),J_t_J.begin(),1,xdim); //recalculate J^{T}*J
+							gns::perturb_diagonal<T::iterator,gfloat>(xdim,J_t_J.begin(),1,xdim,lu_pertubation);
+
+						}
+						opt::math::cpu::lu_single<typename T::iterator, gfloat>(xdim,J_t_J.begin(),1,xdim);
+						
+						opt::math::cpu::lu_solve<typename T::iterator,typename T::iterator,typename T::iterator,gfloat>(xdim,1, J_t_J.begin(), 1, xdim, b.begin(), 1,1, v.begin(), 1,1);
+
+						if (has_nans_or_infs(xdim, J_t_J.begin(), 1)){
+							if(buf){
+								os<<"The descent direction contains at least a NaN or infinity value. This is often caused by numerical errors (limited digit precision).\n";
+							}
+							if (gns_error){
+								*gns_error=gns::GNSError::Numerical;
+							}				
+							delete[] result_valid;
+							return {};
+						}
+					}								
+					if (xtol(xdim,v.begin(),1,tol)){
+						delete[] result_valid;
+						
+						if (gns_error){
+							*gns_error=gns::GNSError::Success;
+						}
+						return {xi};
+					}
+					gfloat beta=alpha;
+
+					int step_iter=0;
+					bool step_size_found=false;
+					
+					//maybe take U by reference
+					auto eval=[](U r, typename T::iterator residual, int rdim, gfloat beta, typename T::iterator v, typename T::iterator xi, int xdim, gfloat alpha, gfloat& f0_val,bool& pars_changed){
+						T _x(xdim); //new parameters
+						
+						for (int i=0;i<xdim;i++){
+							_x[i]=gfloat(-1.0)*beta*v[i]+xi[i]; //get new parameters
+						}
+						
+						auto check_if_different=[](typename T::iterator a,typename T::iterator b, int dim){
+							for (int i=0;i<dim;i++){
+								if (a[i]!=b[i]){
+									return true;
+								}
+							}
+							return false;
+						};
+				
+						pars_changed=check_if_different(_x.begin(),xi,xdim); //if equal then due to rounding errors nothing changed. We should abort estimaton if this thread is selected later
+							
+						if (pars_changed){
 							f0_val=0.0;
 							r(_x.begin(),residual); //evaluate objective function
 							gfloat temp=0.0;
 							for (int i=0;i<rdim;i++){
 								temp+=residual[i] * residual[i];
 							}
-							f0_val=temp;
-							
-						};
-						
-						do{
+							f0_val=temp;						
+						}
+						else{						
+							f0_val=std::numeric_limits<gfloat>::infinity();
+						}
 
-							for (int i=0;i<n_threads;i++){
-								ts[i]=std::thread(eval,r,residuals.begin()+i*rdim,rdim,beta, v.begin(),xi.begin(), xdim, alpha,std::ref(f0_vals[i]));
 						
-								betas[i]=beta;
-								beta*=lambda;
-							}
-							for (auto& t: ts){
-								t.join();
-							}
-							
-							//Find step size that minimizes f0 the most						
-							curr_min=f0_vals[0];
-							int min_index=0;
-							for (int i=1;i<n_threads;i++){
-								if (f0_vals[i]<curr_min){
-									curr_min=f0_vals[i];
-									min_index=i;
-								}
-							}
+					};
+					do{
 
-							//recover the stepsize factor that minimized f0 the most in this iteration, betaopt=alpha*lambda^{step_iter*n_threads+min_index}
+						for (int i=0;i<step_nthreads;i++){
+							ts[i]=std::thread(eval,r,residuals.begin()+i*rdim,rdim,beta, v.begin(),xi.begin(), xdim, alpha,std::ref(f0_vals[i]),std::ref(result_valid[i]));	
+							betas[i]=beta;
+							beta*=lambda;
+						}
+						for (auto& t: ts){
+							t.join();
+						}
+						
+						//Find step size that minimizes f0 the most						
+						curr_min=f0_vals[0];
+						int min_index=0;
+						for (int i=1;i<step_nthreads;i++){
+							if (f0_vals[i]<curr_min){
+								curr_min=f0_vals[i];
+								min_index=i;
+							}
+						}
+						if (result_valid[min_index]){
+							//recover the stepsize factor that minimized f0 the most in this iteration, betaopt=alpha*lambda^{step_iter*step_nthreads+min_index}
 							gfloat betaopt=alpha;
-							for (int i=1;i<step_iter*n_threads+min_index;i++){
+							for (int i=1;i<=step_iter*step_nthreads+min_index;i++){
 								betaopt*=lambda;
 							}
 							
+							//std::cout<<xi[0]<<"  "<<xi[1]<<"direction: "<<(-betaopt*v[0])<<"\t"<<(-betaopt*v[1])<<"\n";
+							//std::cout<<v[0]<<"\t"<<v[1]<<"\n";
+							//std::cout<<(xi[0]-betaopt*v[0])<<"   "<<(xi[1]-betaopt*v[1])<<"\n";
 							if (bls(curr_min, fmin, betaopt, grad.begin(), v.begin(),xdim)){
 								c_r=min_index*rdim;
 								residual=residuals.begin()+c_r;
 								fmin=curr_min;
 								
-								for (int i=0;i<rdim;i++){
-									xi[i]=gfloat(-1.0)*betaopt*v[i]+xi[i]; //get new parameters
-								}
-								/*
-								std::cout<<"Best parameters\n";
 								for (int i=0;i<xdim;i++){
-									std::cout<<xi[i]<<"\n";
-								}*/
-
+									xi[i]=gfloat(-1.0)*betaopt*v[i]+xi[i]; //get new parameters
+									//std::cout<<"x"<<xi[0]<<"  "<<xi[1]<<"\n";
+								}
+	
 								step_size_found=true;
 							}
-							step_iter++;
-							
-						}
-						while(!step_size_found && step_iter<=max_step_iter);
-														
-						if (!step_size_found){
-							return {};
-						}
-						//std::cout<<"fmin:"<<fmin<<"\n";
-						if (fmin<=tol){
-							//std::cout<<"true\n";
-							run_finished=true;
-							return {xi};
+							step_iter++;												
 						}
 						else{
-							std::cout<<"fmin nicht kleiner tol\n";
+							if(buf){
+								os<<"Stepsize cannot be added to the current position. Possible causes:\n* The stepsize is so low that adding the descent vector to the position is below doubles' machine precision\n\n*The descent direction is wrong due to numerical errors in its calculation\n";
+							}
+							break;
 						}
-				
-						iter++;
 					}
-					while (run_finished==false && (iter<max_iter));
-					
+					while(!step_size_found && step_iter<=max_step_iter);
+													
+					if (!step_size_found){
+						if (buf){
+							os<<"No step size found\n";
+						}
+						if (gns_error && step_iter>max_step_iter){
+							*gns_error=gns::GNSError::Numerical;
+						}
+						else if (gns_error){
+							*gns_error=gns::GNSError::NoStepSizeFound;
+						}
+						break;
+					}
+			
+					iter++;
+				}
+				while (iter<max_iter);
+				delete[] result_valid;
+				if (gns_error){
+							*gns_error=gns::GNSError::NoConvergence;
 				}
 				return {};
 				
