@@ -96,7 +96,8 @@ class Convex1{
 Again, the usage of templates is recommended but not required.
 
 The sum of squares residuals function of this example looks like this (a=b=1):
-![alt text](doc/images/gns1.png)
+
+<img src="doc/images/gns1.png" alt="drawing" width="200"/>
 
 #### Starting the GNS solver (CPU Version)
 Calling the Gauss-Newton solver is now very simple. This example is a little more elaborate, as the residual and Jacobian is packed into a class member function (second approach above).
