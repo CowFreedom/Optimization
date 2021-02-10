@@ -128,7 +128,7 @@ auto result=gns.optimize(x0);
 ```
 The result should look like this:
 
-<img src="doc/images/gns2.png" alt="drawing" width="300"/>
+<img src="doc/images/gns_ex1.png" alt="drawing" width="300"/>
 
 #### Starting the GNS solver (GPU Version)
 The GPU version requires the usage of C style arrays. Currently, only the the *float* datatype is supported.
@@ -200,7 +200,7 @@ gns.parameter_names=parameter_names;
 ```
 
 The output will now look as such:
-<img src="doc/images/gns3.png" alt="drawing" width="300"/>
+<img src="doc/images/gns_ex2.png" alt="drawing" width="300"/>
 
 #### Calculate additional data during each iteration
 It is often useful to display additional data, such as statistics or even a complete sensitivity analysis along each iteration.
