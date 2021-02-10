@@ -5,7 +5,11 @@ module;
 #include <vector>
 #include <filesystem>
 export module tests.performance;
-export import :transform;
+export import :transformation;
+
+#ifdef opt_use_cuda
+	export import :transformation.gpu;
+#endif
 
 import tests;
 

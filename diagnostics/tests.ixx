@@ -69,9 +69,9 @@ namespace opt{
 		
 
 		export template <class T, class F>
-		void fill_container_randomly(std::random_device& dev, T v,int n){
-			std::mt19937 rng(dev());
-			std::uniform_real_distribution<> dist(1,6); // distribution in range [1, 6];
+		void fill_container_randomly(std::mt19937& rng, T v,int n, int range=6){
+			//std::mt19937 rng(dev());
+			std::uniform_real_distribution<> dist(0,range); // distribution in range [0, range];
 			for (int i=0;i<n;i++){
 
 				*(v+i)=F(dist(rng));

@@ -10,6 +10,7 @@ module;
 export module tests.correctness:transformation;
 
 import tests;
+import :utility;
 
 import optimization.transformation;
 import optimization.solvers;
@@ -18,75 +19,7 @@ namespace opt{
 	namespace test{
 
 		namespace corr{
-			
-			template<class T, class F>
-			bool verify_calculation(T A, T B, int n_elems, F tol){
-			
-				for (int i=0;i<n_elems;i++){
-					F val=A[i]-B[i];
-					val=(val<0)?-val:val;
-					if (val>tol || (std::isinf(A[i])) || (std::isinf(B[i])) ||(std::isnan(A[i])) || (std::isnan(B[i]))){
-					//std::cout<<"Error at:"<<i<<"\n";
-						return false;
-					}
-				}
-				return true;
-			}
-			
-
-			template<class T, class F>
-			bool verify_nonpacked_vs_packed(const T nonpacked_mat, const T packed_mat, int n, F tol){
-				for (int i=0;i<n;i++){
-					for (int j=0;j<=i;j++){
-						int ix1=i*n+j;
-						int ix2=i*0.5*(i+1)+i*0+j;
-						
-						F val=nonpacked_mat[ix1]-packed_mat[ix2];
-						val=(val<0)?-val:val;
-						if (val>tol){
-							//	std::cout<<nonpacked_mat[ix1]<<" vs. "<<packed_mat[ix2]<<"at position "<<i*n+j<<"\n";
-								return false;
-							}
-						}				
-					}
-
-				return true;
-			}
-			
-			template<class T, class F>
-			bool verify_upperlower(const T C1, const T C2, int n, const char selection, F tol){
-				switch (selection){
-					case 'U':{
-							for (int i=0;i<n;i++){
-								for (int j=i;j<n;j++){
-									if (std::abs(C1[i*n+j]-C2[i*n+j])>tol){
-									//std::cin.get();
-									return false;
-								}
-								}
-								
-							}
-							
-							break;		
-					}
-					
-					case 'L':{
-							for (int i=0;i<n;i++){
-								for (int j=0;j<i;j++){
-									if (std::abs(C1[i*n+j]-C2[i*n+j])>tol){
-									return false;
-								}
-								}	
-							}
-							
-							break;		
-					}	
-				}
-
-				return true;
-			}
-			
-			
+				
 			export bool matrix_multiplication_1(std::ostream& os, CorrectnessTest& v){
 				int m=2;
 				int n=2;
@@ -181,8 +114,9 @@ namespace opt{
 			}
 			
 			export bool matrix_multiplication_4(std::ostream& os, CorrectnessTest& v){
-
-				std::random_device rd;				
+		
+				std::random_device rd;
+				std::mt19937 rng(rd());				
 					
 				std::uniform_real_distribution<> dist(1,300); // distribution in range [1, 6];		
 
@@ -196,7 +130,7 @@ namespace opt{
 					double* control=new double[n*n];
 					double* res=new double[n*n];
 
-					opt::test::fill_container_randomly<double*,double>(rd, A,n*k);
+					opt::test::fill_container_randomly<double*,double>(rng, A,n*k);
 					opt::math::cpu::syurk(n, k,alpha, A, 1, k,beta,res,1,n);	
 					opt::math::cpu::gemm(n,n,k,alpha,A,1,k,A,k,1,beta,control,1,n); //calculate control result, AA^T=C
 					is_correct=verify_upperlower(control, res,n, 'U', 0.0001);
@@ -217,8 +151,9 @@ namespace opt{
 			}	
 
 			export bool matrix_multiplication_5(std::ostream& os, CorrectnessTest& v) {
-
+		
 				std::random_device rd;
+				std::mt19937 rng(rd());			
 
 				std::uniform_real_distribution<> dist(1, 300); // distribution in range [1, 6];		
 
@@ -232,7 +167,7 @@ namespace opt{
 					double* control = new double[n * n];
 					double* res = new double[n * n];
 
-					opt::test::fill_container_randomly<double*, double>(rd, A, n * k);
+					opt::test::fill_container_randomly<double*, double>(rng, A, n * k);
 					opt::math::cpu::sylrk(n, k, alpha, A, 1, k, beta, res, 1, n);
 					opt::math::cpu::gemm(n, n, k, alpha, A, 1, k, A, k, 1, beta, control, 1, n); //calculate control result, AA^T=C
 					is_correct = verify_upperlower(control, res, n, 'L', 0.0001);
@@ -298,10 +233,11 @@ namespace opt{
 			
 			//Tests is choi and choip are equal and calculate the correct result
 			export bool cholesky_2(std::ostream& os, CorrectnessTest& v){
-	
+		
 				std::random_device rd;
+				std::mt19937 rng(rd());			
 				std::uniform_real_distribution<> dist(1, 300); // distribution in range [1, 6];		
-				bool is_correct;
+				bool is_correct=false;
 				for (int i = 0; i < 20; i++) {
 					int n = dist(rd);
 					int k = dist(rd);;
@@ -312,7 +248,7 @@ namespace opt{
 					double* C = new double[n * n]();
 
 					double* temp = new double[n * n]();
-					opt::test::fill_container_randomly<double*, double>(rd, A, n * n);
+					opt::test::fill_container_randomly<double*, double>(rng, A, n * n);
 					//Create symmetric matrix C
 					for (int i=0;i<n;i++){
 						for (int j=0;j<n;j++){
@@ -363,12 +299,13 @@ namespace opt{
 				return true;
 			}
 			export bool cholesky_solve(std::ostream& os, CorrectnessTest& v) {
-
+		
 				std::random_device rd;
+				std::mt19937 rng(rd());
 
 				std::uniform_real_distribution<> dist(100, 1000); // distribution in range [1, 6];		
 
-				bool is_correct;
+				bool is_correct=false;
 				for (int i = 0; i < 20; i++) {
 					int n = dist(rd);
 					int m=1;//lower threshold for eigenvalue of 0.5*(A+A^T)+m*I eigenvalue
@@ -376,7 +313,7 @@ namespace opt{
 					double* A = new double[n * n];
 					double* C = new double[n * n];
 					double* C_copy = new double[n * n];
-					opt::test::fill_container_randomly<double*, double>(rd, A, n * n);
+					opt::test::fill_container_randomly<double*, double>(rng, A, n * n);
 					//Create symmetric matrix C
 					for (int i=0;i<n;i++){
 						for (int j=0;j<n;j++){
@@ -398,7 +335,7 @@ namespace opt{
 					double* b = new double[n];
 					double* x = new double[n];
 					double* res = new double[n];
-					opt::test::fill_container_randomly<double*, double>(rd, b, n);
+					opt::test::fill_container_randomly<double*, double>(rng, b, n);
 					opt::math::cpu::choi_solve<double*,double*,double*,double>(n, C, 1, n, b, 1, x, 1);
 					//printmat("C",C,n,n,std::cout);
 					//printmat("b",b,n,1,std::cout);

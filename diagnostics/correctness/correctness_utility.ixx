@@ -1,10 +1,79 @@
 module;
+#include <random>
 #include<ostream>
 export module tests.correctness:utility;
+
 
 namespace opt{
 	namespace test{
 		namespace corr{
+	
+			template<class T, class F>
+			bool verify_calculation(T A, T B, int n_elems, F tol){
+			
+				for (int i=0;i<n_elems;i++){
+					F val=A[i]-B[i];
+					val=(val<0)?-val:val;
+					if (val>tol || (std::isinf(A[i])) || (std::isinf(B[i])) ||(std::isnan(A[i])) || (std::isnan(B[i]))){
+					//std::cout<<"Error at:"<<i<<"\n";
+						return false;
+					}
+				}
+				return true;
+			}
+			
+
+			template<class T, class F>
+			bool verify_nonpacked_vs_packed(const T nonpacked_mat, const T packed_mat, int n, F tol){
+				for (int i=0;i<n;i++){
+					for (int j=0;j<=i;j++){
+						int ix1=i*n+j;
+						int ix2=i*0.5*(i+1)+i*0+j;
+						
+						F val=nonpacked_mat[ix1]-packed_mat[ix2];
+						val=(val<0)?-val:val;
+						if (val>tol){
+							//	std::cout<<nonpacked_mat[ix1]<<" vs. "<<packed_mat[ix2]<<"at position "<<i*n+j<<"\n";
+								return false;
+							}
+						}				
+					}
+
+				return true;
+			}
+			
+			template<class T, class F>
+			bool verify_upperlower(const T C1, const T C2, int n, const char selection, F tol){
+				switch (selection){
+					case 'U':{
+							for (int i=0;i<n;i++){
+								for (int j=i;j<n;j++){
+									if (std::abs(C1[i*n+j]-C2[i*n+j])>tol){
+									//std::cin.get();
+									return false;
+								}
+								}
+								
+							}
+							
+							break;		
+					}
+					
+					case 'L':{
+							for (int i=0;i<n;i++){
+								for (int j=0;j<i;j++){
+									if (std::abs(C1[i*n+j]-C2[i*n+j])>tol){
+									return false;
+								}
+								}	
+							}
+							
+							break;		
+					}	
+				}
+
+				return true;
+			}
 		
 
 			export template<class C, class T>

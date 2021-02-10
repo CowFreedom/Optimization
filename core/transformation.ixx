@@ -446,9 +446,9 @@ namespace opt{
 				//initializing buffers
 				
 							
-				double* _A=new double[KC*MC];
-				double* _B =new double[KC*NC];
-				double* _C=new double[MC*NC];
+				F* _A=new F[KC*MC];
+				F* _B =new F[KC*NC];
+				F* _C=new F[MC*NC];
 				/*
 				double _A[KC * MC];
 				double _B[KC * NC];
@@ -495,9 +495,9 @@ namespace opt{
 			void gemm_explicit(size_t m, size_t n, size_t k, F alpha, TA A, size_t stride_row_a, size_t stride_col_a,
 				TB B, size_t stride_row_b, size_t stride_col_b, F beta, TC C, size_t stride_row_c, size_t stride_col_c,size_t q_m, size_t q_n, size_t q_k, size_t r_m, size_t r_n, size_t r_k) {
 
-				double* _A=new double[KC * MC];
-				double* _B= new double[KC * NC];
-				double* _C=new double[MC * NC];
+				F* _A=new F[KC * MC];
+				F* _B= new F[KC * NC];
+				F* _C=new F[MC * NC];
 				for (size_t j = 0; j < q_n; j++) {
 					size_t nc = (j != q_n - 1 || r_n == 0) ? NC : r_n;
 					for (int l = 0; l < q_k; l++) {
@@ -547,9 +547,9 @@ namespace opt{
 				}
 				else if(m<500 && n<500){
 				
-				double* _A=new double[KC * MC];
-				double* _B= new double[KC * NC];
-				double* _C=new double[MC * NC];
+				F* _A=new F[KC * MC];
+				F* _B= new F[KC * NC];
+				F* _C=new F[MC * NC];
 				
 					for (size_t j = 0; j < q_n; j++) {
 						size_t nc = (j != q_n - 1 || r_n == 0) ? NC : r_n;

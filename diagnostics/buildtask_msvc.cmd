@@ -28,26 +28,32 @@ if defined USE_CUDA (
 	::Building gpu modules
 	cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\..\gpu\gns_hostgpu.ixx
 	cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\..\gpu\solvers_gpu.ixx
+	
+	
+	::Building correctness test modules
+	cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\tests.ixx
+	cl /Dopt_use_cuda /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\correctness/correctness_utility.ixx 
+	cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\correctness/test_corr_gauss_newton_cpu.ixx 
+	cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\correctness/test_corr_transformation.ixx 
+
+	::Building gpu correctness test submodules and entire module
+	cl /Dopt_use_cuda /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\correctness/test_corr_gauss_newton_gpu.ixx
+	cl /Dopt_use_cuda /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\correctness/test_corr_transformation_gpu.ixx
+	cl /Dopt_use_cuda /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\correctness/correctness.ixx 	
+	
+	::Building performance test modules and entire module
+	cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\performance/test_perf_transformation.ixx 
+	
+	::Building gpu performance test submodules and entire module
+	cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\performance/test_perf_transformation_gpu.ixx 
+	cl /Dopt_use_cuda /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\performance/performance.ixx 
+	
+	::Building final executabble
+	cl /EHsc /experimental:module /Dopt_use_cuda /std:c++latest %curpath:~0,-1%\run_diagnostics.cpp %curpath:~0,-1%\tests.obj %curpath:~0,-1%\performance.obj %curpath:~0,-1%\test_perf_transformation.obj  %curpath:~0,-1%\test_perf_transformation_gpu.obj %curpath:~0,-1%\correctness.obj %curpath:~0,-1%\correctness_utility.obj  %curpath:~0,-1%\test_corr_gauss_newton_cpu.obj %curpath:~0,-1%\test_corr_transformation.obj %curpath:~0,-1%\test_corr_gauss_newton_gpu.obj %curpath:~0,-1%\test_corr_transformation_gpu.obj %curpath:~0,-1%\hostgpu_bindings.obj %curpath:~0,-1%\gns_hostgpu.obj %curpath:~0,-1%\solvers_gpu.obj  %curpath:~0,-1%\gpu_gemm.obj %curpath:~0,-1%\gpu_gmv.obj %curpath:~0,-1%\gpu_ldl.obj %curpath:~0,-1%\gpu_lu.obj /link /LIBPATH:%cudapath% cudart.lib
 )
 
-::Building test modules
-cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\tests.ixx
-cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\performance/test_perf_transform.ixx 
-cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\performance/performance.ixx 
-cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\correctness/correctness_utility.ixx 
-cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\correctness/test_corr_gauss_newton_cpu.ixx 
-cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\correctness/test_corr_transformation.ixx 
-
-if defined USE_CUDA (
-	cl /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\correctness/test_corr_gauss_newton_gpu.ixx
-	cl /Dopt_use_cuda /EHsc /experimental:module /std:c++latest /c %curpath:~0,-1%\correctness/correctness.ixx 
-)
-
-
-
-if defined USE_CUDA (
-	cl /EHsc /experimental:module /Dopt_use_cuda /std:c++latest %curpath:~0,-1%\run_diagnostics.cpp %curpath:~0,-1%\tests.obj %curpath:~0,-1%\performance.obj %curpath:~0,-1%\test_perf_transform.obj  %curpath:~0,-1%\correctness.obj %curpath:~0,-1%\correctness_utility.obj  %curpath:~0,-1%\test_corr_gauss_newton_cpu.obj %curpath:~0,-1%\test_corr_transformation.obj %curpath:~0,-1%\test_corr_gauss_newton_gpu.obj %curpath:~0,-1%\hostgpu_bindings.obj %curpath:~0,-1%\gns_hostgpu.obj %curpath:~0,-1%\solvers_gpu.obj  %curpath:~0,-1%\gpu_gemm.obj %curpath:~0,-1%\gpu_gmv.obj %curpath:~0,-1%\gpu_ldl.obj %curpath:~0,-1%\gpu_lu.obj /link /LIBPATH:%cudapath% cudart.lib
-)
+	
+	
 
 del /f *.ifc *.obj
 

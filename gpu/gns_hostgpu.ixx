@@ -3,6 +3,8 @@ module;
 #include <optional>
 #include <vector>
 #include <thread>
+#include <future>
+#include <string>
 #include <iomanip>
 #include <limits>
 #include "hostgpu_bindings.h"
@@ -77,7 +79,9 @@ namespace opt{
 				float c1=0.0001;
 				float alpha=0.8; //decrease factor in the step size finding iterations
 				float tol=0.0001;
-				
+				bool (*send_numerical_info)(opt::solvers::gns::InfoType, int n, int m, float*, int stride_col, int stride_row)=nullptr; 
+				std::string* parameter_names=nullptr; //Optionally, parameter names can be set for later display
+							
 				GNSGPU(U _r, U _j, int _xdim, int _rdim, std::streambuf* _buf): r(_r), j(_j), rdim(_rdim), xdim(_xdim),buf(_buf), os(_buf){
 				}
 				
@@ -116,6 +120,7 @@ namespace opt{
 					int iter=0;
 					
 					std::vector<std::thread> ts(n_threads);
+					std::future<bool> future;
 					
 					float curr_min;
 					std::vector<float> f0_vals(step_nthreads);
@@ -144,6 +149,11 @@ namespace opt{
 							}
 							delete[] result_valid;
 							return{xi};
+						}
+						
+						//If specified, send jacobian information for further processing
+						if (send_numerical_info){
+							future = std::async(std::launch::async, send_numerical_info,opt::solvers::gns::InfoType::Jacobian,rdim,xdim,J,1,xdim);
 						}
 						
 						bool* lu_used=new bool();
@@ -256,7 +266,10 @@ namespace opt{
 									for (int i=0;i<xdim;i++){
 										xi[i]=-1.0*betaopt*direction[i]+xi[i];
 									}
-
+									if (buf){
+											opt::solvers::gns::stream_iteration_info(iter,xi, xdim, fmin, buf, parameter_names);
+											os<<"\n";
+									}
 									step_size_found=true;	
 								}
 								//std::cout<<"step_iter:"<<step_iter<<"\n";
@@ -280,6 +293,14 @@ namespace opt{
 								*gns_error=opt::solvers::gns::GNSError::NoStepSizeFound;
 							}
 							break;
+						}
+						
+						if (send_numerical_info){
+							if (!future.get()){
+								if (buf){
+									os<<"send_numerical_info did not finish successfully\n";
+								}
+							}
 						}
 				
 						iter++;

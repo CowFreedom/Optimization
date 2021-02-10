@@ -331,7 +331,7 @@ void gemm_f32_nonblockmultiple(int m, int n, int k, float alpha, const float* A_
 		if (copy!=cudaSuccess){
 			printf("Copy fehlgeschlagen\n");
 		}
-		printf("Starte nun den Kernel\n");
+	//	printf("Starte nun den Kernel\n");
 		dim3 threadsize=dim3(4,4,1);
 		dim3 blocksize=dim3(ceil(n/256.0),ceil(m/256.0),1);
 		k_scal_f32<<<blocksize,threadsize>>>(m,n,beta,C_d,1,nB);
@@ -386,7 +386,7 @@ void gemm_f32(int m, int n, int k, float alpha, const float* A_h, const float* B
 		gemm_f32_blockmultiple(m,n,k,alpha,A_h,B_h,beta,C_h);
 	}
 	else{
-	printf("nonblockmultiple\n");
+//	printf("nonblockmultiple\n");
 		gemm_f32_nonblockmultiple(m,n,k,alpha,A_h,B_h,beta,C_h);
 	}
 }

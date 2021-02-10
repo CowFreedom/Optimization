@@ -12,6 +12,7 @@ export import :transformation;
 //Import GPU code
 #ifdef opt_use_cuda
 	export import :gauss_newton.gpu;
+	export import :transformation.gpu;
 #endif
 
 

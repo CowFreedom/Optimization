@@ -2,9 +2,11 @@ module;
 #include <ostream>
 #include <optional>
 #include <thread>
+#include <future>
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <string>
 #include <iomanip> //std setprecision
 export module optimization.solvers:gaussnewton;
 
@@ -41,38 +43,36 @@ namespace opt{
 				NoConvergence
 			};
 			
-				/*
-			template<class T>
-			std::string print_info<EFloat64>(T vars, T J_T_J_inv, int iteration, typename T::value_type f0x){
-				std::ostringstream res;
-				res.precision(15);
-				size_t m=vars;
-				const std::vector<EVar<EFloat64>>& params=vars.get_params();
-				const std::vector<std::string>& names=vars.get_names();
+			export enum class InfoType{
+				Jacobian,
+				ApproxHessian, //corresponds to A=(J^{T}*J)
+				CholeskyApproxHessian, //corresponds to A=(J^{T}*J)=LDL^{T}
+			};
+			
+			export template<class T, class F>
+			void stream_iteration_info(int iteration,T vars, int xdim, F fmin,	std::streambuf* buf, std::string* names, int precision=15){
+				std::ostream os(buf);
+				os.precision(precision);
+				os<<std::setw(17)<<std::left<<"Newton Iteration"<<std::setw(25)<<std::right<<iteration<<"\n"<<std::setw(17)<<std::left<<"f0"<<std::setw(25)<<std::right<<fmin<<"\n";	
 				
-				std::vector<double> std_devs_inv(m,0.0);
-				
-				//Calculate variances for each parameter
-				for (int i=0;i<m;i++){
-					std_devs_inv[i]=1.0/sqrt(J_T_J_inv_scaled[i+i*m].get_v());
-				}
-				
-				res<<std::setw(30)<<std::left<<"Newton iteration: "<<iteration<<"\n";
-				res<<std::setw(30)<<std::left<<"Squared Error: "<<squared_error.get_v()<<"\n";
-				res<<std::setw(30)<<std::left<<"Parameter"<<"|"<<std::setw(25)<<"Estimate"<<"|"<<std::setw(30)<<"Approx. Standard Error"<<"|"<<std::setw(20)<<"Approx. Correlation Matrix\n";
-				for (int i=0;i<m;i++){
-					res<<std::setw(30)<<std::left<<names[i]<<"|"<<std::setw(25)<<std::right<<params[i].get_value_as_double()<<"|"<<std::setw(30)<<sqrt(J_T_J_inv_scaled[i+i*m].get_v())<<"|";
-					for (int j=0;j<=i;j++){
-						res<<"\t"<<std::setw(13)<<std_devs_inv[i]*std_devs_inv[j]*J_T_J_inv_scaled[j+i*m].get_v();
+				if (names){			
+					const int name_width=30;
+					const int num_width=25;
+					const int num_fields=2; //number of table entries above
+					const std::string separator=" |";
+					const int total_width=name_width+num_width+separator.size()*num_fields;
+					std::string line=separator + std::string(total_width-1,'-')+'|';
+					os<<line<<"\n"<<separator;
+					os<<std::setw(name_width)<<"Parameter"<<separator<<std::setw(num_width)<<"Estimate"<<separator<<"\n"<<line<<"\n";
+					
+					for (int i=0;i<xdim;i++){
+						os<<separator<<std::setw(name_width)<<names[i]<<separator<<std::setw(num_width)<<vars[i]<<separator<<"\n"<<line<<"\n";
+					
 					}
-					res<<"\n";
-				}
-				
-				return res.str();
-				
+					
+				}				
 			}			
-
-*/			
+		
 	
 			
 			//l1 vector norm tolerance
@@ -104,6 +104,20 @@ namespace opt{
 				for (int i=0;i<n;i++){
 					A[i*stride_row+i*stride_col]+=eps;				
 				}
+			}
+			
+			template<class T>
+			bool calculate_correlation(InfoType info, int n, int m, typename T::iterator A, int stride_col, int stride_row, std::streambuf* buf){
+				if (info==InfoType::Jacobian){
+						//TODO: ADD LOGIC
+					if (buf){
+						std::ostream os(buf);
+					
+					}
+				}
+				else{
+						return false;
+				}	
 			}
 		}
 	
@@ -173,6 +187,9 @@ namespace opt{
 			gfloat alpha=0.8;	//decrease factor in the newton stepsize iterations	
 			gfloat tol=0.0001;
 			gfloat lu_pertubation=5; //If LDL and LU decompositions fail, the approximated hessian J^{T}*J is perturbed along the diagonal by this factor
+			std::string* parameter_names=nullptr;//Optionally, parameter names can be set for later display
+			
+			bool (*send_numerical_info)(gns::InfoType, int n, int m, typename T::iterator, int stride_col, int stride_row)=nullptr; 
 			
 			GNSCPU(U _r,U _j,int _xdim, int _rdim, std::streambuf* _buf): r(_r), j(_j),rdim(_rdim),xdim(_xdim),buf(_buf),os(_buf){
 				
@@ -185,7 +202,7 @@ namespace opt{
 			@param[in] initial_params Initial parameters containing starting values for the procedure.
 			\return Code indicating success or failure of running the Gauss-Newton procedure.
 			*/
-			std::optional<T> run(T x0, gns::GNSError* gns_error=nullptr){
+			std::optional<T> optimize(T x0, gns::GNSError* gns_error=nullptr){
 	
 				if (x0.size()<xdim){
 					os<<"Size of the input container does not fit the dimension of the problem";
@@ -208,6 +225,7 @@ namespace opt{
 				int iter=0;
 				
 				std::vector<std::thread> ts(n_threads);
+				std::future<bool> future;
 				gfloat curr_min;
 				
 				bool* result_valid=new bool[step_nthreads]();	
@@ -221,6 +239,11 @@ namespace opt{
 					//used for sum calculation. not necessary but probably faster due cache misses in the traversal of array
 					for(int i=0;i<xdim;i++){
 						grad[i]=0.0;
+					}
+					
+					//If specified, send jacobian information for further processing
+					if (send_numerical_info){
+						future = std::async(std::launch::async, send_numerical_info,gns::InfoType::Jacobian,rdim,xdim,J.begin(),1,xdim);
 					}
 					
 					gfloat all_zeros=0.0;
@@ -238,7 +261,6 @@ namespace opt{
 						delete[] result_valid;
 						return{xi};
 					}
-				
 					
 					opt::math::cpu::gemm(xdim,xdim,rdim,gfloat(1.0),J.begin(),xdim,1,J.begin(),1,xdim,gfloat(0.0),J_t_J.begin(),1,xdim); //calculate J^{T}*J
 					opt::math::cpu::dgmv(xdim,rdim,gfloat(1.0),J.begin(),xdim,1,residual,1,gfloat(0.0),b.begin(),1); //calculate vector for J^{T}*J*v=b
@@ -370,7 +392,10 @@ namespace opt{
 									xi[i]=gfloat(-1.0)*betaopt*v[i]+xi[i]; //get new parameters
 									//std::cout<<"x"<<xi[0]<<"  "<<xi[1]<<"\n";
 								}
-	
+								if (buf){
+									gns::stream_iteration_info(iter,xi.begin(), xdim, fmin, buf, parameter_names);
+									os<<"\n";
+								}
 								step_size_found=true;
 							}
 							step_iter++;												
@@ -395,6 +420,14 @@ namespace opt{
 							*gns_error=gns::GNSError::NoStepSizeFound;
 						}
 						break;
+					}
+					
+					if (send_numerical_info){
+						if (!future.get()){
+							if (buf){
+								os<<"send_numerical_info did not finish successfully\n";
+							}
+						}
 					}
 			
 					iter++;

@@ -6,7 +6,9 @@ module;
 #include <functional>
 #include <iostream>
 #include <thread> //warum brauche ich das? prüfen!
-#include <array>
+#include <future> //warum brauche ich auch den? Nur weil er im GNS Löser definiert ist?
+#include <string>
+#include <chrono>
 export module tests.correctness:gauss_newton.cpu;
 
 import :utility;
@@ -37,6 +39,7 @@ namespace opt{
 			
 			export bool gauss_newton_example3(std::ostream& os, CorrectnessTest& v){
 				std::vector<double> x0={-0.3,-0.3};
+				std::string parameter_names[]={"x1","x2"};
 				double tol=1e-10;
 				double x1=5;
 				double x2=-90;
@@ -49,7 +52,8 @@ namespace opt{
 				
 				opt::solvers::GNSCPU<std::vector<double>,std::function<void(std::vector<double>::const_iterator, std::vector<double>::iterator)>> gns(f1,f2,c.xdim,c.rdim,std::cout.rdbuf());
 				gns.tol=tol;
-				auto result=gns.run(x0);
+				gns.parameter_names=parameter_names;
+				auto result=gns.optimize(x0);
 				
 				if (result){
 					float p1=(*result)[0];
@@ -96,7 +100,7 @@ namespace opt{
 					
 					opt::solvers::GNSCPU<std::vector<double>,std::function<void(std::vector<double>::const_iterator, std::vector<double>::iterator)>> gns(f1,f2,c1.xdim,c1.rdim,std::cout.rdbuf());
 					gns.tol=0.1; //lower values lead to instability in the approximated hesse matrix calculations
-					auto result=gns.run(x0);
+					auto result=gns.optimize(x0);
 			
 					if (result){
 						double x=(*result)[0];
