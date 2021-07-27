@@ -3,26 +3,29 @@ module;
 #include<iostream>
 #include <thread>
 #include <vector>
-export module optimization.transformation;
 
-#if defined(__clang__)
-	#include <x86intrin.h> //SIMD for gcc/clang
-#elif defined(__GNUC__) || defined(__GNUG__)
-	#include <x86intrin.h> //SIMD for gcc/clang
-#elif defined(_MSC_VER)
-	#include<immintrin.h> //AVX, AVX2, FMA for VS
+#if defined(USE_EXPLICIT_SIMD)
+	#if defined(__clang__)
+		#include <x86intrin.h> //SIMD for gcc/clang
+	#elif defined(__GNUC__) || defined(__GNUG__)
+		#include <x86intrin.h> //SIMD for gcc/clang
+	#elif defined(_MSC_VER)
+		#include<immintrin.h> //AVX, AVX2, FMA for VS
+	#endif
 #endif
+
+export module optimization.transformation;
 
 namespace opt{
 	namespace math{
 		namespace cpu{
 			
-			constexpr size_t MC = 384; //
-			constexpr size_t KC = 384;
-			constexpr size_t NC = 4096;
-
-			constexpr size_t MR = 32;
-			constexpr size_t NR = 32; //probleme bei dieser blockgröße, muss vielfaches von 4 sein und größer 4
+			export inline constexpr size_t MC = 384; //
+			export inline constexpr size_t KC = 384;
+			export inline constexpr size_t NC = 4096;
+				    
+			export inline constexpr size_t MR = 32;
+			export inline constexpr size_t NR = 32; //probleme bei dieser blockgröße, muss vielfaches von 4 sein und größer 4
 
 			/*Returns a complete panel of dimension MRxKC, which is sliced along
 			the horizontal axis MR. Assumes Matrix
@@ -67,7 +70,7 @@ namespace opt{
 			void pack_A(size_t mc, size_t kc, T A, size_t stride_rows, size_t stride_cols, F* buffer) {
 				size_t r = mc % MR; //number of complete "stripes"
 				size_t q = mc / MR;
-							F* aux=buffer;
+				
 				for (size_t i = 0; i < q; i++) {
 					pack_MRxk(kc, A, buffer, stride_rows, stride_cols);
 					A += MR * stride_cols;
@@ -138,12 +141,12 @@ namespace opt{
 				
 			}
 			
-			//A is in column major form and B is in row major form (i.e. A was packed by the function pack_A and B by pack_B)
 
+#if defined(USE_EXPLICIT_SIMD)
+
+			//A is in column major form and B is in row major form (i.e. A was packed by the function pack_A and B by pack_B)
 			template<class T>
 			void gemm_micro_kernel(size_t kc, double alpha, const double* A, const double* B, double beta, T C, size_t stride_row_c, int stride_col_c) {
-				//std::cout<<A[0]<<"\t"<<A[1]<<"\n"<<A[MR]<<"\t"<<A[MR+1]<<"\n";
-
 				//double* AB =(double*)_aligned_malloc(NR*MR*sizeof(double), 64);
 			//	double AB[NR*MR] __attribute__ ((aligned (16)));
 				double AB[NR*MR];
@@ -169,63 +172,6 @@ namespace opt{
 						B += NR;
 					}
 				}
-				
-				
-				
-				/*
-				for (size_t k = 0; k < kc; k++) {
-					for (size_t j = 0; j < MR; j+=4) {
-						__m256d  tmp1 = _mm256_loadu_pd(A+j);	
-						double tmp[]={0.0,0.0,0.0,0.0};
-						for (size_t i = 0; i < NR; i += 4) {
-							size_t inc = j * NR + i;
-							double* out=AB+inc;
-							__m256d  tmp2 = _mm256_loadu_pd(B+i);			
-							
-							__m256d tmp3=_mm256_mul_pd(tmp1,tmp2);	
-							_mm256_storeu_pd(tmp, tmp3);
-
-							out[0]+=tmp[0];
-							out[NR+1]+=tmp[1];
-							out[2*NR+2]+=tmp[2];
-							out[3*NR+3]+=tmp[3];
-
-							__m256d tmp4 = _mm256_permute_pd (tmp2,0b0101);	// Permutation (1,2,3,4)->(2,1,4,3)
-							tmp3=_mm256_mul_pd(tmp1,tmp4);	
-							_mm256_storeu_pd(tmp, tmp3);	
-
-							out[1]+=tmp[0];
-							out[NR]+=tmp[1];
-							out[2*NR+3]+=tmp[2];
-							out[3*NR+2]+=tmp[3];
-
-							tmp4 = _mm256_permute4x64_pd(tmp2,0b00011011);	// Permutation (1,2,3,4)->(4,3,2,1). This instruction is roughly three times slower than the other permute ones
-							tmp3=_mm256_mul_pd(tmp1,tmp4);	
-							_mm256_storeu_pd(tmp, tmp3);	
-
-							out[3]+=tmp[0];
-							out[NR+2]+=tmp[1];
-							out[2*NR+1]+=tmp[2];
-							out[3*NR]+=tmp[3];
-
-							tmp3=_mm256_permute_pd(tmp4,0b0101);	// Permutation (4,3,2,1)->(4,3,1,2)
-							tmp4=_mm256_mul_pd(tmp1,tmp3);	
-							_mm256_storeu_pd(tmp, tmp4);
-
-							out[2]+=tmp[0];
-							out[NR+3]+=tmp[1];
-							out[2*NR]+=tmp[2];
-							out[3*NR+1]+=tmp[3];
-						}
-					}
-					
-					if (k < KC - 1) {
-						A += MR;
-						B += NR;
-					}
-				}
-				*/
-
 				
 				//
 				//  Update C <- beta*C
@@ -268,6 +214,7 @@ namespace opt{
 				//free(AB);
 				//delete[] AB;
 			}
+#endif
 
 			//A is in column major form and B is in row major form (i.e. A was packed by the function pack_A and B by pack_B)
 			template<class T, class F>
@@ -358,10 +305,6 @@ namespace opt{
 				else {
 					for (int j = 0; j < m; ++j) {
 						for (int i = 0; i < n; ++i) {
-							//std::cout<<"in dgeaxpy!\n";
-							//printmat(X,m,n);
-							//std::cout<<Y[i*stride_row_y+j*stride_col_y]<<" plus "<<X[i*stride_row_x+j*stride_col_x]<<"\n";
-							//std::cin.get();
 							Y[i * stride_row_y + j * stride_col_y] += X[i * stride_row_x + j * stride_col_x];
 						}
 					}
@@ -380,7 +323,6 @@ namespace opt{
 					for (int j = 0; j < m; ++j) {
 						for (int i = 0; i < n; ++i) {
 							X[i * stride_row_x + j * stride_col_x] *= alpha;
-							//std::cout << X[i * stride_row_x + j * stride_col_x] << "\n";
 						}
 					}
 				}
@@ -388,8 +330,6 @@ namespace opt{
 					for (int j = 0; j < m; ++j) {
 						for (int i = 0; i < n; ++i) {
 							X[i * stride_row_x + j * stride_col_x] = 0;
-							//std::cout << X[i * stride_row_x + j * stride_col_x] << "\n";
-							//std::cout << "i:" << i << "j" << j << "\n";;
 						}
 					}
 				}
@@ -530,7 +470,7 @@ namespace opt{
 				size_t r_m = m % MC;
 				size_t r_n = n % NC;
 				size_t r_k = k % KC;
-
+	
 				//initializing buffers
 				//double* _A[KC * MC];
 				//double* _B[KC * NC];
@@ -957,9 +897,10 @@ namespace opt{
 				//std::cout << "in macro kernel\n";
 				size_t r_m = mc % MR;
 				size_t r_n = nc % NR;
+				
 				//If MR!=NR, we may have to adjust for the different sizes accordingly
-				int ki = (MR < NR) ? NR / MR : 1;  // 2
-				int kj = (MR > NR) ? MR / NR : 1;  // 1
+				size_t ki = (MR < NR) ? NR / MR : 1;  // 2
+				size_t kj = (MR > NR) ? MR / NR : 1;  // 1
 
 				for (size_t j = 0; j < q_n; j++) {
 					size_t nr = ((j != q_n - 1) || (r_n == 0)) ? NR : r_n;
@@ -1099,6 +1040,7 @@ namespace opt{
 
 			export template<class TA, class TC, class F>
 			void syurk(int n, int k, F alpha, TA A, int stride_row_a, int stride_col_a, F beta, TC C, int stride_row_c, int stride_col_c) {
+
 				if (alpha == F(0.0) || k == 0) {
 					truscal(n, n, beta, C, stride_row_c, stride_col_c); //there are no matrix A, B to add to C with
 					return;
@@ -1268,7 +1210,7 @@ namespace opt{
 				//If MR!=NR, we may have to adjust for the different sizes accordingly
 				int ki = (MR < NR) ? NR / MR : 1;  // 2
 				int kj = (MR > NR) ? MR / NR : 1;  // 1
-
+				
 				for (size_t j = 0; j < q_n; j++) {
 					size_t nr = ((j != q_n - 1) || (r_n == 0)) ? NR : r_n;
 					for (size_t i = ki * (j / kj); i < q_m; i++) {

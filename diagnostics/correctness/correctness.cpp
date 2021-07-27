@@ -4,7 +4,9 @@ module;
 #include <fstream>
 #include <vector>
 #include <filesystem>
+//#include <iostream>
 export module tests.correctness;
+
 import :utility;
 export import :gauss_newton.cpu;
 export import :transformation;
@@ -16,21 +18,4 @@ export import :transformation;
 #endif
 
 
-
-
-
-import tests;
-
-//import string;
-namespace opt{
-	namespace test{
-		namespace corr{
-		
-		}
-	}
-}
-
-
-
-	
 

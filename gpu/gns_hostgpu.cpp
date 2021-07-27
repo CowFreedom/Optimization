@@ -6,11 +6,13 @@ module;
 #include <future>
 #include <string>
 #include <iomanip>
+#include <cmath>
 #include <limits>
 #include "hostgpu_bindings.h"
-export module optimization.gpu.solvers:gaussnewton;
+export module optimization.gpu.solvers.gaussnewton;
 
-import optimization.solvers;
+//import optimization.solvers;
+import optimization.solvers.gaussnewton;
 
 namespace opt{
 	namespace solvers{

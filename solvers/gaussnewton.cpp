@@ -3,20 +3,24 @@ module;
 #include <optional>
 #include <thread>
 #include <future>
-#include <iostream>
 #include <vector>
 #include <algorithm>
 #include <string>
+#include <cmath>
 #include <iomanip> //std setprecision
-export module optimization.solvers:gaussnewton;
+export module optimization.solvers.gaussnewton;
+
+
 
 import optimization.transformation;
+
 
 namespace opt{
 	namespace solvers{
 	
 		/*Concept that describes which member function a container must
 		contain for the algorithms to work.*/
+
 		template<class T>
 		concept ValidContainer=requires(T& t) {
 		 t.push_back((typename T::value_type)(0.0));
@@ -120,14 +124,11 @@ namespace opt{
 				}	
 			}
 		}
-	
-		export template<ValidContainer T,class U>
-		class GNSCPU{
-		};
+
 
 	
 		export template<ValidContainer T,class U>
-		class GNSCPU<T,U> {
+		class GNSCPU {
 			
 			using gfloat=typename T::value_type;
 			
@@ -213,7 +214,7 @@ namespace opt{
 				}
 				//Test is parameters already minimize f0 according to tol
 				T residuals(rdim*n_threads); //collection of residuals for each thread
-				typename T::iterator residual=residuals.begin();
+				auto residual=residuals.begin();
 				int c_r=0; //current best residual
 				gfloat fmin=f0(x0.begin(),residuals.begin()); //current minimum
 				T J(xdim*rdim);
@@ -265,7 +266,7 @@ namespace opt{
 					opt::math::cpu::gemm(xdim,xdim,rdim,gfloat(1.0),J.begin(),xdim,1,J.begin(),1,xdim,gfloat(0.0),J_t_J.begin(),1,xdim); //calculate J^{T}*J
 					opt::math::cpu::dgmv(xdim,rdim,gfloat(1.0),J.begin(),xdim,1,residual,1,gfloat(0.0),b.begin(),1); //calculate vector for J^{T}*J*v=b
 					opt::math::cpu::choi<typename T::iterator, gfloat>(xdim, J_t_J.begin(), 1, xdim); //calculate cholesky diagonal A=LDL^{T} decomposition				
-					bool diagonal_has_zero=gns::check_diagonal_has_zero<T::iterator,gfloat>(xdim,J_t_J.begin(),1,xdim);
+					bool diagonal_has_zero=gns::check_diagonal_has_zero<typename T::iterator,gfloat>(xdim,J_t_J.begin(),1,xdim);
 					
 					if(!diagonal_has_zero){
 						opt::math::cpu::choi_solve<typename T::iterator,typename T::iterator,typename T::iterator,gfloat>(xdim, J_t_J.begin(), 1, xdim, b.begin(), 1, v.begin(), 1);
@@ -280,7 +281,7 @@ namespace opt{
 						//Recreate the initial state of J_t_J_d;
 						opt::math::cpu::gemm(xdim,xdim,rdim,gfloat(1.0),J.begin(),xdim,1,J.begin(),1,xdim,gfloat(0.0),J_t_J.begin(),1,xdim); //calculate J^{T}*J
 						opt::math::cpu::lu_single<typename T::iterator, gfloat>(xdim,J_t_J.begin(),1,xdim);
-						diagonal_has_zero=gns::check_diagonal_has_zero<T::iterator,gfloat>(xdim,J_t_J.begin(),1,xdim);
+						diagonal_has_zero=gns::check_diagonal_has_zero<typename T::iterator,gfloat>(xdim,J_t_J.begin(),1,xdim);
 						
 						/*If matrix still singular, slightly perturb diagonal and redo LU decomposition*/
 						if (diagonal_has_zero){
@@ -288,7 +289,7 @@ namespace opt{
 								os<<"Diagonal still zero after LU decomposition. Perturbing the diagonal of approximated Hessian and redoing decomposition.\n";
 							}
 							opt::math::cpu::gemm(xdim,xdim,rdim,gfloat(1.0),J.begin(),xdim,1,J.begin(),1,xdim,gfloat(0.0),J_t_J.begin(),1,xdim); //recalculate J^{T}*J
-							gns::perturb_diagonal<T::iterator,gfloat>(xdim,J_t_J.begin(),1,xdim,lu_pertubation);
+							gns::perturb_diagonal<typename T::iterator,gfloat>(xdim,J_t_J.begin(),1,xdim,lu_pertubation);
 
 						}
 						opt::math::cpu::lu_single<typename T::iterator, gfloat>(xdim,J_t_J.begin(),1,xdim);
@@ -449,4 +450,3 @@ namespace opt{
 		
 	}
 }
-

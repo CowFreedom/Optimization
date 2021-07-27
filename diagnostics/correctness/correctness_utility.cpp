@@ -1,6 +1,7 @@
 module;
 #include <random>
 #include<ostream>
+#include <cmath>
 export module tests.correctness:utility;
 
 
@@ -12,6 +13,7 @@ namespace opt{
 			bool verify_calculation(T A, T B, int n_elems, F tol){
 			
 				for (int i=0;i<n_elems;i++){
+					//std:cout<<A[i]<<" vs. "<<B[i]<<"\n";
 					F val=A[i]-B[i];
 					val=(val<0)?-val:val;
 					if (val>tol || (std::isinf(A[i])) || (std::isinf(B[i])) ||(std::isnan(A[i])) || (std::isnan(B[i]))){
@@ -48,7 +50,7 @@ namespace opt{
 					case 'U':{
 							for (int i=0;i<n;i++){
 								for (int j=i;j<n;j++){
-									if (std::abs(C1[i*n+j]-C2[i*n+j])>tol){
+									if (std::fabs(C1[i*n+j]-C2[i*n+j])>tol){
 									//std::cin.get();
 									return false;
 								}
@@ -62,7 +64,7 @@ namespace opt{
 					case 'L':{
 							for (int i=0;i<n;i++){
 								for (int j=0;j<i;j++){
-									if (std::abs(C1[i*n+j]-C2[i*n+j])>tol){
+									if (std::fabs(C1[i*n+j]-C2[i*n+j])>tol){
 									return false;
 								}
 								}	
@@ -74,7 +76,17 @@ namespace opt{
 
 				return true;
 			}
-		
+
+			void gemm_naive_cpu(int m, int n, int k, double alpha, const double* A, int stride_row_a, int stride_col_a, const double* B, int stride_row_b, int stride_col_b, double beta, double* C,int stride_row_c, int stride_col_c){	
+				for (int i=0;i<m;i++){
+					for (int j=0;j<n;j++){
+						C[i*stride_col_c+j*stride_row_c]*=beta;
+						for (int u=0;u<k;u++){
+							C[i*stride_col_c+j*stride_row_c]+=alpha*A[i*stride_col_a+u*stride_row_a]*B[u*stride_col_b+j*stride_row_b];
+						}		
+					}	
+				}	
+			}
 
 			export template<class C, class T>
 			class Circle{

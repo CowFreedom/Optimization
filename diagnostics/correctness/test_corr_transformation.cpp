@@ -118,7 +118,7 @@ namespace opt{
 				std::random_device rd;
 				std::mt19937 rng(rd());				
 					
-				std::uniform_real_distribution<> dist(1,300); // distribution in range [1, 6];		
+				std::uniform_real_distribution<> dist(1,300);	
 
 				bool is_correct;
 				for (int i=0;i<20;i++){
@@ -157,7 +157,7 @@ namespace opt{
 
 				std::uniform_real_distribution<> dist(1, 300); // distribution in range [1, 6];		
 
-				bool is_correct;
+				bool is_correct=true;
 				for (int i = 0; i < 20; i++) {
 					int n = dist(rd);
 					int k = dist(rd);
@@ -185,6 +185,89 @@ namespace opt{
 					return true;
 				}
 				return false;
+			}
+			export bool matrix_multiplication_6(std::ostream& os, CorrectnessTest& v){
+		
+				std::random_device rd;
+				std::mt19937 rng(rd());				
+					
+				std::uniform_real_distribution<> dist(384,500);		
+
+				bool is_correct;
+				for (int i=0;i<20;i++){
+					int m=dist(rd);
+					int n=dist(rd);
+					int k=dist(rd);
+					double beta=0;		
+					double alpha=1.0;
+					double* A=new double[m*k];
+					double* B=new double[n*k];
+					double* control=new double[m*n];
+					double* res=new double[m*n];
+
+					opt::test::fill_container_randomly<double*,double>(rng, A,m*k);
+					opt::test::fill_container_randomly<double*,double>(rng, B,n*k);
+					opt::math::cpu::gemm(m,n,k,alpha,A,1,k,B,1,n,beta,res,1,n); //calculate result, A*B=C
+					gemm_naive_cpu(m,n,k,alpha,A,1,k,B,1,n,beta,control,1,n); //calculate control result, A*B=C
+					is_correct=verify_calculation(control,res,m*n,0.001);
+					delete[] A;
+					delete[] B;
+					delete[] control;
+					delete[] res;	
+					if (is_correct==false){
+						return false;
+					}
+		
+				}
+				v.test_successful=true;
+				return true;
+			}
+			
+			export bool matrix_multiplication_7(std::ostream& os, CorrectnessTest& v){
+		
+				std::random_device rd;
+				std::mt19937 rng(rd());				
+					
+				std::uniform_real_distribution<> dist(384,500);		
+				bool is_correct=true;
+				for (int i=0;i<20;i++){
+					int m=dist(rd);
+					double beta=0;		
+					double alpha=1.0;
+					double* A=new double[m*m]();
+					double* res=new double[m*m];
+
+					for (int i=0;i<m;i++){
+						A[i*m+i]=1.0;
+					}
+					opt::math::cpu::gemm(m,m,m,alpha,A,1,m,A,1,m,beta,res,1,m); //calculate result, A*B=C
+	
+					for (int i=0;i<m;i++){
+						for (int j=0;j<m;j++){
+							if (i==j){
+								if (res[i*m+i]!=(alpha*A[i*m+i])){							
+									is_correct=false;
+									return false;
+								}
+							}
+							else{
+								if (res[i*m+j]!=(alpha*A[i*m+j])){
+									is_correct=false;
+									return false;
+								}
+							}
+						}
+					}
+					delete[] A;
+					delete[] res;	
+					if (is_correct==false){
+						return false;
+					}
+		
+				}
+				v.test_successful=true;
+				return true;
+				
 			}
 	
 			//Tests is choi and choip are equal and calculate the correct result
